@@ -58,3 +58,6 @@
 [submodule "src/nvml"]
 	path = src/nvml
 	url = https://github.com/ceph/nvml.git
+[submodule "src/common/cxx_function"]
+	path = src/common/cxx_function
+	url = https://github.com/potswa/cxx_function
