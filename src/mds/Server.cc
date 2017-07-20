@@ -8667,11 +8667,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   ::decode(snapid, p);
   dout(10) << " stid " << stid << " snapid " << snapid << dendl;
 
-  // FIXME: notify all other mds the change
-  if (stid > mds->snapclient->get_cached_version()) {
-    mds->snapclient->refresh(stid, new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
+  assert(mds->snapclient->get_cached_version() >= stid);
 
   // journal
   SnapInfo info;
@@ -8807,11 +8803,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   ::decode(seq, p);  
   dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
 
-  // FIXME: notify all other mds the change
-  if (stid > mds->snapclient->get_cached_version()) {
-    mds->snapclient->refresh(stid, new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
+  assert(mds->snapclient->get_cached_version() >= stid);
 
   // journal
   inode_t *pi = diri->project_inode();
@@ -8953,11 +8945,7 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
   version_t stid = mdr->more()->stid;
   dout(10) << " stid is " << stid << dendl;
 
-  // FIXME: notify all other mds the change
-  if (stid > mds->snapclient->get_cached_version()) {
-    mds->snapclient->refresh(stid, new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
+  assert(mds->snapclient->get_cached_version() >= stid);
 
   // journal
   inode_t *pi = diri->project_inode();
