@@ -6167,7 +6167,7 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   mdr->apply();
 
   if (snap_is_new) //only new if strayin exists
-    mdcache->do_realm_invalidate_and_update_notify(strayin, CEPH_SNAP_OP_SPLIT, true);
+    mdcache->do_realm_invalidate_and_update_notify(strayin, CEPH_SNAP_OP_SPLIT, false);
   
   mdcache->send_dentry_unlink(dn, straydn, mdr);
   
@@ -7478,7 +7478,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
 	bool hadrealm = (oldin->snaprealm ? true : false);
 	oldin->pop_and_dirty_projected_inode(mdr->ls);
 	if (oldin->snaprealm && !hadrealm)
-	  mdcache->do_realm_invalidate_and_update_notify(oldin, CEPH_SNAP_OP_SPLIT);
+	  mdcache->do_realm_invalidate_and_update_notify(oldin, CEPH_SNAP_OP_SPLIT, false);
       } else {
 	// FIXME this snaprealm is not filled out correctly
 	//oldin->open_snaprealm();  might be sufficient..	
@@ -8711,6 +8711,9 @@ void Server::_mksnap_finish(MDRequestRef& mdr, CInode *diri, SnapInfo &info)
   // create snap
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
+  // notify other mds
+  mdcache->send_snap_update(diri, mdr->more()->stid, op);
+
   mdcache->do_realm_invalidate_and_update_notify(diri, op);
 
   // yay
@@ -8839,6 +8842,9 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
   mds->snapclient->commit(stid, mdr->ls);
 
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
+
+  // notify other mds
+  mdcache->send_snap_update(diri, mdr->more()->stid, CEPH_SNAP_OP_DESTROY);
 
   mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_DESTROY);
 
@@ -8979,7 +8985,10 @@ void Server::_renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid
 
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
-  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_UPDATE, true);
+  // notify other mds
+  mdcache->send_snap_update(diri, mdr->more()->stid, CEPH_SNAP_OP_UPDATE);
+
+  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_UPDATE);
 
   // yay
   mdr->in[0] = diri;
