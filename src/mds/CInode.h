@@ -401,15 +401,18 @@ public:
    */
 
   struct projected_inode_t {
+    static sr_t* const UNDEF_SRNODE;
+
     inode_t *inode;
     std::map<std::string,bufferptr> *xattrs;
     sr_t *snapnode;
 
     projected_inode_t()
-      : inode(NULL), xattrs(NULL), snapnode(NULL) {}
+      : inode(NULL), xattrs(NULL), snapnode(UNDEF_SRNODE) {}
     projected_inode_t(inode_t *in, sr_t *sn)
       : inode(in), xattrs(NULL), snapnode(sn) {}
-    projected_inode_t(inode_t *in, std::map<std::string, bufferptr> *xp = NULL, sr_t *sn = NULL)
+    projected_inode_t(inode_t *in, std::map<std::string, bufferptr> *xp=NULL,
+		      sr_t *sn=UNDEF_SRNODE)
       : inode(in), xattrs(xp), snapnode(sn) {}
   };
   std::list<projected_inode_t*> projected_nodes;   // projected values (only defined while dirty)
@@ -490,7 +493,7 @@ public:
       for (std::list<projected_inode_t*>::const_reverse_iterator p = projected_nodes.rbegin();
 	  p != projected_nodes.rend();
 	  ++p)
-	if ((*p)->snapnode)
+	if ((*p)->snapnode != projected_inode_t::UNDEF_SRNODE)
 	  return (*p)->snapnode;
     }
     if (snaprealm)
@@ -503,7 +506,7 @@ public:
       for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
 	   p != projected_nodes.rend();
 	   ++p)
-	if ((*p)->snapnode)
+	if ((*p)->snapnode != projected_inode_t::UNDEF_SRNODE)
 	  return (*p)->snapnode;
     }
     if (snaprealm)
