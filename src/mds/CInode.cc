@@ -422,7 +422,7 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   projected_nodes.pop_front();
 }
 
-sr_t *CInode::project_snaprealm(snapid_t snapid)
+sr_t *CInode::prepare_new_srnode(snapid_t snapid)
 {
   const sr_t *cur_srnode = get_projected_srnode();
   sr_t *new_srnode;
@@ -434,17 +434,28 @@ sr_t *CInode::project_snaprealm(snapid_t snapid)
     new_srnode->created = snapid;
     new_srnode->current_parent_since = get_oldest_snap();
   }
-  dout(10) << __func__ << " " << new_srnode << dendl;
-  projected_nodes.back()->snapnode = new_srnode;
-  ++num_projected_srnodes;
   return new_srnode;
 }
 
-/* if newparent != parent, add parent to past_parents
- if parent DNE, we need to find what the parent actually is and fill that in */
-void CInode::project_past_snaprealm_parent(SnapRealm *newparent)
+void CInode::project_snaprealm(sr_t *new_srnode)
+{
+  dout(10) << __func__ << " " << new_srnode << dendl;
+  assert(!projected_nodes.back()->snapnode);
+  projected_nodes.back()->snapnode = new_srnode;
+  ++num_projected_srnodes;
+}
+
+void CInode::project_snaprealm_past_parent(SnapRealm *newparent)
 {
   sr_t *new_snap = project_snaprealm();
+  record_snaprealm_past_parent(new_snap, newparent);
+}
+
+
+/* if newparent != parent, add parent to past_parents
+ if parent DNE, we need to find what the parent actually is and fill that in */
+void CInode::record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent)
+{
   SnapRealm *oldparent;
   if (!snaprealm) {
     oldparent = find_snaprealm();

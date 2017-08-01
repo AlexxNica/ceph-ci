@@ -1940,10 +1940,10 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
   }
 
   CDentry *straydn = NULL;
-  if (m->stray.length() > 0) {
-    straydn = mdcache->add_replica_stray(m->stray, from);
+  if (m->straybl.length() > 0) {
+    straydn = mdcache->add_replica_stray(m->straybl, from);
     assert(straydn);
-    m->stray.clear();
+    m->straybl.clear();
   }
 
   // am i a new slave?
@@ -6010,6 +6010,15 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (straydn)
     straydn->first = std::max<uint64_t>(in->first, follows + 1);
 
+  if (dnl->is_primary() && !mdr->more()->desti_srnode) {
+    // prepare snaprealm blob for slave request
+    if (in->snaprealm || follows + 1 > in->get_oldest_snap()) {
+      sr_t *new_srnode = in->prepare_new_srnode(follows);
+      in->record_snaprealm_past_parent(new_srnode, straydn->get_dir()->inode->find_snaprealm());
+      mdr->more()->desti_srnode = new_srnode;
+    }
+  }
+
   // yay!
   if (in->is_dir() && in->has_subtree_root_dirfrag()) {
     // subtree root auths need to be witnesses
@@ -6101,8 +6110,13 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn, sna
     mdcache->predirty_journal_parents(mdr, &le->metablob, in, straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
 
     // project snaprealm, too
-    if (in->snaprealm || follows + 1 > in->get_oldest_snap())
-      in->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
+    if (in->snaprealm || follows + 1 > in->get_oldest_snap()) {
+      assert(mdr->more()->desti_srnode);
+      in->project_snaprealm(mdr->more()->desti_srnode);
+      mdr->more()->desti_srnode = NULL;
+    } else {
+      assert(!mdr->more()->desti_srnode);
+    }
 
     pi->update_backtrace();
     le->metablob.add_primary_dentry(straydn, in, true, true);
@@ -6153,27 +6167,30 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
 
   // relink as stray?  (i.e. was primary link?)
   CInode *strayin = NULL;
-  bool snap_is_new = false;
+  bool hadrealm = false;
   if (straydn) {
     dout(20) << " straydn is " << *straydn << dendl;
     CDentry::linkage_t *straydnl = straydn->pop_projected_linkage();
     strayin = straydnl->get_inode();
 
-    snap_is_new = strayin->snaprealm ? true : false;
+    hadrealm = strayin->snaprealm ? true : false;
+
     mdcache->touch_dentry_bottom(straydn);
   }
 
   dn->mark_dirty(dnpv, mdr->ls);
   mdr->apply();
-
-  if (snap_is_new) //only new if strayin exists
-    mdcache->do_realm_invalidate_and_update_notify(strayin, CEPH_SNAP_OP_SPLIT, false);
   
   mdcache->send_dentry_unlink(dn, straydn, mdr);
   
-  // update subtree map?
-  if (straydn && strayin->is_dir())
-    mdcache->adjust_subtree_after_rename(strayin, dn->get_dir(), true);
+  if (straydn) {
+    // update subtree map?
+    if (strayin->is_dir())
+      mdcache->adjust_subtree_after_rename(strayin, dn->get_dir(), true);
+
+    if (strayin->snaprealm && !hadrealm)
+      mdcache->do_realm_invalidate_and_update_notify(strayin, CEPH_SNAP_OP_SPLIT, false);
+  }
 
   // bump pop
   mds->balancer->hit_dir(mdr->get_mds_stamp(), dn->get_dir(), META_POP_IWR);
@@ -6209,7 +6226,9 @@ bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CD
   req->srcdnpath = filepath(trace.front()->get_dir()->ino());
   for (auto dn : trace)
     req->srcdnpath.push_dentry(dn->name);
-  mdcache->replicate_stray(straydn, who, req->stray);
+  mdcache->replicate_stray(straydn, who, req->straybl);
+  if (mdr->more()->desti_srnode)
+    ::encode(*mdr->more()->desti_srnode, req->desti_snapbl);
 
   req->op_stamp = mdr->get_op_stamp();
   mds->send_message_mds(req, who);
@@ -6274,40 +6293,23 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   rollback.dest_dir = straydn->get_dir()->dirfrag();
   rollback.dest_dname = straydn->name;
   ::encode(rollback, mdr->more()->rollback_bl);
+  // FIXME: rollback snaprealm
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
 
   // set up commit waiter
   mdr->more()->slave_commit = new C_MDS_SlaveRmdirCommit(this, mdr, straydn);
 
-  if (!in->has_subtree_root_dirfrag(mds->get_nodeid())) {
-    dout(10) << " no auth subtree in " << *in << ", skipping journal" << dendl;
-    dn->get_dir()->unlink_inode(dn);
-    straydn->get_dir()->link_primary_inode(straydn, in);
-
-    assert(straydn->first >= in->first);
-    in->first = straydn->first;
-
-    mdcache->adjust_subtree_after_rename(in, dn->get_dir(), false);
-
-    MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
-						   MMDSSlaveRequest::OP_RMDIRPREPACK);
-    reply->mark_not_journaled();
-    mds->send_message_mds(reply, mdr->slave_to_mds);
-
-    // send caps to auth (if we're not already)
-    if (in->is_any_caps() && !in->state_test(CInode::STATE_EXPORTINGCAPS))
-      mdcache->migrator->export_caps(in);
-
-    mdcache->touch_dentry_bottom(straydn); // move stray to end of lru
-
-    mdr->slave_request->put();
-    mdr->slave_request = 0;
-    mdr->straydn = 0;
-    return;
-  }
-
   straydn->push_projected_linkage(in);
   dn->push_projected_linkage();
+
+  assert(straydn->first >= in->first);
+  in->first = straydn->first;
+
+  if (!in->has_subtree_root_dirfrag(mds->get_nodeid())) {
+    dout(10) << " no auth subtree in " << *in << ", skipping journal" << dendl;
+    _logged_slave_rmdir(mdr, dn, straydn);
+    return;
+  }
 
   ESlaveUpdate *le =  new ESlaveUpdate(mdlog, "slave_rmdir", mdr->reqid, mdr->slave_to_mds,
 				       ESlaveUpdate::OP_PREPARE, ESlaveUpdate::RMDIR);
@@ -6339,7 +6341,17 @@ void Server::_logged_slave_rmdir(MDRequestRef& mdr, CDentry *dn, CDentry *strayd
   dn->get_dir()->unlink_inode(dn);
   straydn->pop_projected_linkage();
   dn->pop_projected_linkage();
-  mdcache->adjust_subtree_after_rename(in, dn->get_dir(), true);
+
+  mdcache->adjust_subtree_after_rename(in, dn->get_dir(), mdr->more()->slave_update_journaled);
+
+  if (mdr->slave_request->desti_snapbl.length()) {
+    bool hadrealm = (in->snaprealm ? true : false);
+    in->decode_snap_blob(mdr->slave_request->desti_snapbl);
+    assert(in->snaprealm);
+    assert(in->snaprealm->have_past_parents_open());
+    if (!hadrealm)
+      mdcache->do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT, false);
+  }
 
   // done.
   mdr->slave_request->put();
@@ -6349,6 +6361,8 @@ void Server::_logged_slave_rmdir(MDRequestRef& mdr, CDentry *dn, CDentry *strayd
   if (!mdr->aborted) {
     MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 						   MMDSSlaveRequest::OP_RMDIRPREPACK);
+    if (!mdr->more()->slave_update_journaled)
+      reply->mark_not_journaled();
     mds->send_message_mds(reply, mdr->slave_to_mds);
   } else {
     dout(10) << " abort flag set, finishing" << dendl;
@@ -6880,7 +6894,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     return;
   }
 
-  /* project_past_snaprealm_parent() will do this job
+  /* project_snaprealm_past_parent() will do this job
    *
   // moving between snaprealms?
   if (srcdnl->is_primary() && srci->is_multiversion() && !srci->snaprealm) {
@@ -6918,6 +6932,29 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 	mdcache->open_remote_dirfrag(srci, *p, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
+    }
+  }
+
+  // -- prepare snaprealm ---
+
+  if (destdnl->is_primary() && !mdr->more()->desti_srnode) {
+    SnapRealm *dest_realm = destdir->inode->find_snaprealm();
+    snapid_t follows = dest_realm->get_newest_seq();
+    if (oldin->snaprealm || follows + 1 > oldin->get_oldest_snap()) {
+      sr_t *new_srnode = oldin->prepare_new_srnode(follows);
+      oldin->record_snaprealm_past_parent(new_srnode, straydn->get_dir()->inode->find_snaprealm());
+      mdr->more()->desti_srnode = new_srnode;
+    }
+  }
+  if (srcdn->is_auth() && srcdnl->is_primary() && !mdr->more()->srci_srnode) {
+    SnapRealm *dest_realm = destdir->inode->find_snaprealm();
+    SnapRealm *src_realm = srci->find_snaprealm();
+    snapid_t follows = src_realm->get_newest_seq();
+    if (src_realm != dest_realm &&
+	(srci->snaprealm || follows + 1 > srci->get_oldest_snap())) {
+      sr_t *new_srnode = srci->prepare_new_srnode(follows);
+      srci->record_snaprealm_past_parent(new_srnode, dest_realm);
+      mdr->more()->srci_srnode = new_srnode;
     }
   }
 
@@ -7068,7 +7105,12 @@ bool Server::_rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_
   for (auto dn : dsttrace)
     req->destdnpath.push_dentry(dn->name);
   if (straydn)
-    mdcache->replicate_stray(straydn, who, req->stray);
+    mdcache->replicate_stray(straydn, who, req->straybl);
+
+  if (mdr->more()->srci_srnode)
+    ::encode(*mdr->more()->srci_srnode, req->srci_snapbl);
+  if (mdr->more()->desti_srnode)
+    ::encode(*mdr->more()->desti_srnode, req->desti_snapbl);
 
   req->srcdn_auth = mdr->more()->srcdn_auth_mds;
   
@@ -7337,8 +7379,13 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       assert(straydn);
       if (destdn->is_auth()) {
 	// project snaprealm, too
-	if (oldin->snaprealm || dest_realm->get_newest_seq() + 1 > oldin->get_oldest_snap())
-	  oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
+	if (oldin->snaprealm || dest_realm->get_newest_seq() + 1 > oldin->get_oldest_snap()) {
+	  assert(mdr->more()->desti_srnode);
+	  oldin->project_snaprealm(mdr->more()->desti_srnode);
+	  mdr->more()->desti_srnode = NULL;
+	} else {
+	  assert(!mdr->more()->desti_srnode);
+	}
 	straydn->first = std::max<uint64_t>(oldin->first, dest_realm->get_newest_seq() + 1);
 	metablob->add_primary_dentry(straydn, oldin, true, true);
       } else if (force_journal_stray) {
@@ -7385,8 +7432,13 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
     if (destdn->is_auth() && src_realm != dest_realm &&
-        (srci->snaprealm || src_realm->get_newest_seq() + 1 > srci->get_oldest_snap()))
-      srci->project_past_snaprealm_parent(dest_realm);
+        (srci->snaprealm || src_realm->get_newest_seq() + 1 > srci->get_oldest_snap())) {
+	  assert(mdr->more()->srci_srnode);
+	  srci->project_snaprealm(mdr->more()->srci_srnode);
+	  mdr->more()->srci_srnode = NULL;
+    } else {
+      assert(!mdr->more()->srci_srnode);
+    }
     
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
@@ -7460,6 +7512,9 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&
 		    (srcdnl->is_primary() || destdnl->is_primary()));
 
+  bool new_in_snaprealm = false;
+  bool new_oldin_snaprealm = false;
+
   // target inode
   if (!linkmerge) {
     if (destdnl->is_primary()) {
@@ -7477,11 +7532,15 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
       if (destdn->is_auth()) {
 	bool hadrealm = (oldin->snaprealm ? true : false);
 	oldin->pop_and_dirty_projected_inode(mdr->ls);
-	if (oldin->snaprealm && !hadrealm)
-	  mdcache->do_realm_invalidate_and_update_notify(oldin, CEPH_SNAP_OP_SPLIT, false);
+	new_oldin_snaprealm = (oldin->snaprealm && !hadrealm);
       } else {
-	// FIXME this snaprealm is not filled out correctly
-	//oldin->open_snaprealm();  might be sufficient..	
+	assert(mdr->slave_request);
+	if (mdr->slave_request->desti_snapbl.length()) {
+	  new_oldin_snaprealm = !oldin->snaprealm;
+	  oldin->decode_snap_blob(mdr->slave_request->desti_snapbl);
+	  assert(oldin->snaprealm);
+	  assert(oldin->snaprealm->have_past_parents_open());
+	}
       }
     } else if (destdnl->is_remote()) {
       destdn->get_dir()->unlink_inode(destdn, false);
@@ -7559,10 +7618,17 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
     }
 
     if (destdn->is_auth()) {
+      bool hadrealm = (in->snaprealm ? true : false);
       in->pop_and_dirty_projected_inode(mdr->ls);
-
+      new_in_snaprealm = (in->snaprealm && !hadrealm);
     } else {
-      // FIXME: fix up snaprealm!
+      assert(mdr->slave_request);
+      if (mdr->slave_request->srci_snapbl.length()) {
+	new_in_snaprealm = !in->snaprealm;
+	in->decode_snap_blob(mdr->slave_request->srci_snapbl);
+	assert(in->snaprealm);
+	assert(in->snaprealm->have_past_parents_open());
+      }
     }
   }
 
@@ -7582,6 +7648,11 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
 
   if (straydn && oldin->is_dir())
     mdcache->adjust_subtree_after_rename(oldin, destdn->get_dir(), true);
+
+  if (new_oldin_snaprealm)
+    mdcache->do_realm_invalidate_and_update_notify(oldin, CEPH_SNAP_OP_SPLIT, false);
+  if (new_in_snaprealm)
+    mdcache->do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT, true);
 
   // removing a new dn?
   if (srcdn->is_auth())
@@ -7766,11 +7837,25 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
       break;
     }
 
+    if (srcdnl->is_primary() && !mdr->slave_request->srci_snapbl.length()) {
+      SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
+      SnapRealm *src_realm = srci->find_snaprealm();
+      snapid_t follows = src_realm->get_newest_seq();
+      if (src_realm != dest_realm &&
+	  (srci->snaprealm || follows + 1 > srci->get_oldest_snap())) {
+	sr_t *new_srnode = srci->prepare_new_srnode(follows);
+	srci->record_snaprealm_past_parent(new_srnode, dest_realm);
+	::encode(*new_srnode, mdr->slave_request->srci_snapbl);
+	delete new_srnode;
+      }
+    }
+
     if (reply_witness) {
       assert(!srcdnrep.empty());
       MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 						     MMDSSlaveRequest::OP_RENAMEPREPACK);
       reply->witnesses.swap(srcdnrep);
+      reply->srci_snapbl.swap(mdr->slave_request->srci_snapbl);
       mds->send_message_mds(reply, mdr->slave_to_mds);
       mdr->slave_request->put();
       mdr->slave_request = 0;
@@ -7822,6 +7907,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
     rollback.stray.dname = straydn->name;
   }
   ::encode(rollback, mdr->more()->rollback_bl);
+  // FIXME: rollback snaprealm
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
 
   // journal.
@@ -7900,11 +7986,13 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
 
   // apply
   _rename_apply(mdr, srcdn, destdn, straydn);   
-  
-  destdnl = destdn->get_linkage();
+
+  if (mdr->more()->is_inode_exporter)
+    reply->srci_snapbl.swap(mdr->slave_request->srci_snapbl);
 
   // bump popularity
   mds->balancer->hit_dir(mdr->get_mds_stamp(), srcdn->get_dir(), META_POP_IWR);
+  destdnl = destdn->get_linkage();
   if (destdnl->get_inode() && destdnl->get_inode()->is_auth())
     mds->balancer->hit_inode(mdr->get_mds_stamp(), destdnl->get_inode(),
 			     META_POP_IWR);
@@ -8421,6 +8509,13 @@ void Server::handle_slave_rename_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *a
     dout(10) << " got srci import" << dendl;
     mdr->more()->inode_import.claim(ack->inode_export);
     mdr->more()->inode_import_v = ack->inode_export_v;
+  }
+
+  if (ack->srci_snapbl.length() && !mdr->more()->srci_srnode) {
+    dout(10) << " got srci snapbl" << dendl;
+    mdr->more()->srci_srnode = new sr_t();
+    bufferlist::iterator p = ack->srci_snapbl.begin();
+    ::decode(*mdr->more()->srci_srnode, p);
   }
 
   // remove from waiting list
