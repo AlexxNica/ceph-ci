@@ -7948,7 +7948,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
     return -ESTALE;
 
   // make sure snaprealm are open...
-  if (mdr && cur->snaprealm && !cur->snaprealm->is_open() &&
+  if (mdr && cur->snaprealm && !cur->snaprealm->have_past_parents_open() &&
       !cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
     return 1;
   }
@@ -8114,7 +8114,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 
       cur = in;
       // make sure snaprealm are open...
-      if (mdr && cur->snaprealm && !cur->snaprealm->is_open() &&
+      if (mdr && cur->snaprealm && !cur->snaprealm->have_past_parents_open() &&
 	  !cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
 	return 1;
       }
