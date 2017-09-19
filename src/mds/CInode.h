@@ -516,9 +516,10 @@ public:
   }
   void record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent);
   void project_snaprealm_past_parent(SnapRealm *newparent);
+  void early_pop_projected_snaprealm();
 
 private:
-  void pop_projected_snaprealm(sr_t *next_snaprealm);
+  void pop_projected_snaprealm(sr_t *next_snaprealm, bool early);
 
 public:
   old_inode_t& cow_old_inode(snapid_t follows, bool cow_head);
