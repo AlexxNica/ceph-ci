@@ -2271,6 +2271,20 @@ class CephManager:
             time.sleep(3)
         self.log("active!")
 
+    def wait_till_pg_convergence(self, timeout=None):
+        start = time.time()
+        old_stats = None
+        while True:
+            new_stats = dict((stat['pgid'], stat['state'])
+                             for stat in self.get_pg_stats())
+            if old_stats == new_stats:
+                return old_stats
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'failed to reach convergence before %d secs' % timeout
+            old_stats = new_stats
+            time.sleep(3)
+
     def mark_out_osd(self, osd):
         """
         Wrapper to mark osd out.
