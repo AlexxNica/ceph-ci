@@ -4173,7 +4173,6 @@ bool OSD::maybe_wait_for_max_pg(spg_t pgid, bool is_mon_create)
      cct->_conf->get_val<double>("osd_max_pg_per_osd_hard_ratio"));
   dout(5) << __func__ << " mon_max_pg_per_osd: "
 	  << cct->_conf->get_val<int64_t>("mon_max_pg_per_osd") << dendl;
-	  << ": " << pg_map.size() << " / "<< max_pgs_per_osd << dendl;
   dout(5) << __func__ << " osd_max_pg_per_osd_hard_ratio: "
 	  << cct->_conf->get_val<double>("osd_max_pg_per_osd_hard_ratio") << dendl;
   dout(5) << __func__ << " considering creating pg " << pgid
