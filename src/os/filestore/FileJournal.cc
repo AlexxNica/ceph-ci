@@ -2022,6 +2022,8 @@ bool FileJournal::read_entry(
         journaled_seq = seq;
       return true;
     }
+  } else {
+    derr << "do_read_entry(" << pos << "): " << ss.str() << dendl;
   }
 
   if (seq && seq < header.committed_up_to) {
@@ -2037,7 +2039,6 @@ bool FileJournal::read_entry(
     }
   }
 
-  dout(25) << ss.str() << dendl;
   dout(2) << "No further valid entries found, journal is most likely valid"
 	  << dendl;
   return false;
