@@ -119,13 +119,12 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
       uint64_t size = MIN(left_pbrs, IOV_MAX);
       left_pbrs -= size;
       memset(&msg, 0, sizeof(msg));
-      msg.msg_iovlen = 0;
+      msg.msg_iovlen = size;
       msg.msg_iov = msgvec;
       unsigned msglen = 0;
       while (size > 0) {
         msgvec[msg.msg_iovlen].iov_base = (void*)(pb->c_str());
         msgvec[msg.msg_iovlen].iov_len = pb->length();
-        msg.msg_iovlen++;
         msglen += pb->length();
         ++pb;
         size--;
