@@ -3761,7 +3761,7 @@ int RGWRados::register_to_service_map(const string& daemon_type, const map<strin
   return 0;
 }
 
-int RGWRados::update_service_map(const std::map<std::string, std::string>& status)
+int RGWRados::update_service_map(std::map<std::string, std::string>&& status)
 {
   int ret = rados[0].service_daemon_update_status(status);
   if (ret < 0) {
