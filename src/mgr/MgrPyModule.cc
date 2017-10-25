@@ -170,32 +170,64 @@ int MgrPyModule::load()
   }
 
   // Find the class
-  // TODO: let them call it what they want instead of just 'Module'
-  auto pClass = PyObject_GetAttrString(pModule, (const char*)"Module");
+  PyObject *mgr_module = PyImport_ImportModule("mgr_module");
+  if (!mgr_module) {
+    derr << "Module not found: 'mgr_module'" << dendl;
+    derr << handle_pyerror() << dendl;
+    return -EINVAL;
+  }
+
+  auto mgr_module_type = PyObject_GetAttrString(mgr_module, (const char*)"MgrModule");
+  if (!mgr_module_type) {
+    derr << "Unable to import MgrModule from mgr_module" << dendl;
+    derr << handle_pyerror() << dendl;
+    return -EINVAL;
+  }
+
+  auto locals = PyModule_GetDict(pModule);
+  Py_DECREF(mgr_module);
   Py_DECREF(pModule);
-  if (pClass == nullptr) {
-    derr << "Class not found in module '" << module_name << "'" << dendl;
-    derr << handle_pyerror() << dendl;
-    return -EINVAL;
+  PyObject *key, *value;
+  Py_ssize_t pos = 0;
+  while (PyDict_Next(locals, &pos, &key, &value)) {
+    if (!PyType_Check(value)) {
+      continue;
+    }
+    if (!PyObject_IsSubclass(value, mgr_module_type)) {
+      continue;
+    }
+    if (PyObject_RichCompareBool(value, mgr_module_type, Py_EQ)) {
+      continue;
+    }
+    auto class_name = PyString_AsString(key);
+    if (pClassInstance) {
+      derr << __func__ << ": ignoring '" << module_name << "." << class_name << "'"
+	   << ": only one 'MgrModule' class is loaded from each plugin" << dendl;
+      continue;
+    }
+    // Just using the module name as the handle, replace with a
+    // uuidish thing if needed
+    auto py_class = value;
+    auto py_module_name = PyString_FromString(module_name.c_str());
+    auto py_args = PyTuple_Pack(1, py_module_name);
+    pClassInstance = PyObject_CallObject(py_class, py_args);
+    Py_DECREF(py_module_name);
+    Py_DECREF(py_args);
+    if (!pClassInstance) {
+      derr << __func__ << ": failed to construct class '"
+	   << module_name << "." << class_name << "'" << dendl;
+      derr << handle_pyerror() << dendl;
+      return -EINVAL;
+    }
+    dout(1) << __func__ << ": constructed class: '"
+	    << module_name << "." << class_name << "'" << dendl;
   }
-
-  
-  // Just using the module name as the handle, replace with a
-  // uuidish thing if needed
-  auto pyHandle = PyString_FromString(module_name.c_str());
-  auto pArgs = PyTuple_Pack(1, pyHandle);
-  pClassInstance = PyObject_CallObject(pClass, pArgs);
-  Py_DECREF(pClass);
-  Py_DECREF(pyHandle);
-  Py_DECREF(pArgs);
-  if (pClassInstance == nullptr) {
-    derr << "Failed to construct class in '" << module_name << "'" << dendl;
-    derr << handle_pyerror() << dendl;
-    return -EINVAL;
-  } else {
-    dout(1) << "Constructed class from module: " << module_name << dendl;
+  Py_DECREF(mgr_module_type);
+  if (!pClassInstance) {
+    derr << __func__ << ": no 'MgrModule' class found in "
+	 << "'" << module_name << "'" << dendl;
+    return -ENOENT;
   }
-
   return load_commands();
 }
 
