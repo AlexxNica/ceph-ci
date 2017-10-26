@@ -1491,13 +1491,11 @@ public:
     if (p == ls->end())
       seek(off);
     unsigned left = len;
-    for (std::list<ptr>::const_iterator i = otherl._buffers.begin();
-	 i != otherl._buffers.end();
-	 ++i) {
-      unsigned l = (*i).length();
+    for (const auto& b : otherl._buffers) {
+      unsigned l = b.length();
       if (left < l)
 	l = left;
-      copy_in(l, i->c_str());
+      copy_in(l, b.c_str());
       left -= l;
       if (left == 0)
 	break;
