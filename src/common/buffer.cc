@@ -1571,12 +1571,8 @@ public:
 
   bool buffer::list::can_zero_copy() const
   {
-    for (std::list<ptr>::const_iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it)
-      if (!it->can_zero_copy())
-	return false;
-    return true;
+    return std::all_of(_buffers.begin(), _buffers.end(),
+		       std::mem_fn(&ptr::can_zero_copy));
   }
 
   bool buffer::list::is_provided_buffer(const char *dst) const
