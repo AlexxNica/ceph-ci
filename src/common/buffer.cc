@@ -2108,7 +2108,7 @@ public:
     //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << std::endl;
       
     // skip off
-    std::list<ptr>::iterator curbuf = _buffers.begin();
+    auto curbuf = _buffers.begin();
     while (off > 0) {
       assert(curbuf != _buffers.end());
       if (off >= (*curbuf).length()) {
@@ -2127,7 +2127,8 @@ public:
       // add a reference to the front bit
       //  insert it before curbuf (which we'll hose)
       //cout << "keeping front " << off << " of " << *curbuf << std::endl;
-      _buffers.insert( curbuf, ptr( *curbuf, 0, off ) );
+      curbuf = _buffers.insert( curbuf, ptr( *curbuf, 0, off ) );
+      ++curbuf; // To get around iterator invalidation
       _len += off;
     }
     
@@ -2150,7 +2151,8 @@ public:
       if (claim_by) 
 	claim_by->append( *curbuf, off, howmuch );
       _len -= (*curbuf).length();
-      _buffers.erase( curbuf++ );
+      // For the sake of invalidation
+      curbuf = _buffers.erase(curbuf);
       len -= howmuch;
       off = 0;
     }
