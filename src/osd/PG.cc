@@ -1839,17 +1839,18 @@ void PG::activate(ObjectStore::Transaction& t,
 
       build_might_have_unfound();
 
-      // XXX: Has _update_calc_stats() run?  If so, base on num_objects_degraded?
-      state_set(PG_STATE_DEGRADED);
       if (have_unfound())
 	discover_all_missing(query_map);
     }
 
     // degraded?
+    // XXX: Has _update_calc_stats() run?
+    if (info.stats.stats.sum.num_objects_degraded)
+      state_set(PG_STATE_DEGRADED);
+
     // num_objects_degraded if calculated should reflect this too, unless no
     // missing and we are about to go clean.
     if (get_osdmap()->get_pg_size(info.pgid.pgid) > actingset.size()) {
-      state_set(PG_STATE_DEGRADED);
       state_set(PG_STATE_UNDERSIZED);
     }
 
@@ -7228,23 +7229,28 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
   }
 
   bool need_publish = false;
+  int64_t before = pg->info.stats.stats.sum.num_objects_degraded;
+  pg->_update_calc_stats(); // Too bad this is called again from publish_stats_to_osd()
+  int64_t after = pg->info.stats.stats.sum.num_objects_degraded;
+  if (!before != !after) {
+    need_publish = true;
+    if (after) {
+      pg->state_set(PG_STATE_DEGRADED);
+    } else {
+      pg->state_clear(PG_STATE_DEGRADED);
+    }
+  }
+
   /* Check for changes in pool size (if the acting set changed as a result,
    * this does not matter) */
   if (advmap.lastmap->get_pg_size(pg->info.pgid.pgid) !=
       pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid)) {
     if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <= pg->actingset.size()) {
       pg->state_clear(PG_STATE_UNDERSIZED);
-      // XXX: Base this on num_objects_degraded instead?
-      if (pg->needs_recovery()) {
-	pg->state_set(PG_STATE_DEGRADED);
-      } else {
-	pg->state_clear(PG_STATE_DEGRADED);
-      }
     } else {
       pg->state_set(PG_STATE_UNDERSIZED);
-      pg->state_set(PG_STATE_DEGRADED);
     }
-    need_publish = true; // degraded may have changed
+    need_publish = true; // undersized may have changed
   }
 
   // if we haven't reported our PG stats in a long time, do so now.
