@@ -1615,40 +1615,36 @@ public:
 
   void buffer::list::zero()
   {
-    for (std::list<ptr>::iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it)
-      it->zero();
+    for (auto& b : _buffers)
+      b.zero();
   }
 
   void buffer::list::zero(unsigned o, unsigned l)
   {
-    assert(o+l <= _len);
+    ceph_assert(o+l <= _len);
     unsigned p = 0;
-    for (std::list<ptr>::iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it) {
-      if (p + it->length() > o) {
-        if (p >= o && p+it->length() <= o+l) {
+    for (auto b : _buffers) {
+      if (p + b.length() > o) {
+        if (p >= o && p + b.length() <= o+l) {
           // 'o'------------- l -----------|
           //      'p'-- it->length() --|
-	  it->zero();
+	  b.zero();
         } else if (p >= o) {
           // 'o'------------- l -----------|
           //    'p'------- it->length() -------|
-	  it->zero(0, o+l-p);
-        } else if (p + it->length() <= o+l) {
+	  b.zero(0, o + l - p);
+        } else if (p + b.length() <= o + l) {
           //     'o'------------- l -----------|
           // 'p'------- it->length() -------|
-	  it->zero(o-p, it->length()-(o-p));
+	  b.zero(o - p, b.length() - (o - p));
         } else {
           //       'o'----------- l -----------|
           // 'p'---------- it->length() ----------|
-          it->zero(o-p, l);
+          b.zero(o - p, l);
         }
       }
-      p += it->length();
-      if (o+l <= p)
+      p += b.length();
+      if (o + l <= p)
 	break;  // done
     }
   }
