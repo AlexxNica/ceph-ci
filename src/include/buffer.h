@@ -798,9 +798,8 @@ namespace buffer CEPH_BUFFER_API {
 
     // clone non-shareable buffers (make shareable)
     void make_shareable() {
-      std::list<buffer::ptr>::iterator pb;
-      for (pb = _buffers.begin(); pb != _buffers.end(); ++pb) {
-        (void) pb->make_shareable();
+      for (auto& b : _buffers) {
+        b.make_shareable();
       }
     }
 
@@ -809,10 +808,9 @@ namespace buffer CEPH_BUFFER_API {
     {
       if (this != &bl) {
         clear();
-        std::list<buffer::ptr>::const_iterator pb;
-        for (pb = bl._buffers.begin(); pb != bl._buffers.end(); ++pb) {
-          push_back(*pb);
-        }
+	std::copy(bl._buffers.begin(), bl._buffers.end(),
+		  std::back_inserter(_buffers));
+	_len = bl._len;
       }
     }
 
