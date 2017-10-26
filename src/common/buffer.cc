@@ -1598,15 +1598,14 @@ public:
   }
 
   bool buffer::list::is_aligned_size_and_memory(unsigned align_size,
-						  unsigned align_memory) const
+						unsigned align_memory) const
   {
-    for (std::list<ptr>::const_iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it) {
-      if (!it->is_aligned(align_memory) || !it->is_n_align_sized(align_size))
-	return false;
-    }
-    return true;
+    using std::placeholders::_1;
+    return std::all_of(_buffers.begin(), _buffers.end(),
+		       [align_size, align_memory](const ptr& p) {
+			 return (p.is_aligned(align_size) &&
+				 p.is_n_align_sized(align_memory));
+		       });
   }
 
   bool buffer::list::is_zero() const {
