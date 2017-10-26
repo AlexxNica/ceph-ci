@@ -2455,12 +2455,10 @@ int buffer::list::write_fd_zero_copy(int fd) const
 
 __u32 buffer::list::crc32c(__u32 crc) const
 {
-  for (std::list<ptr>::const_iterator it = _buffers.begin();
-       it != _buffers.end();
-       ++it) {
-    if (it->length()) {
-      raw *r = it->get_raw();
-      pair<size_t, size_t> ofs(it->offset(), it->offset() + it->length());
+  for (auto b : _buffers) {
+    if (b.length()) {
+      raw *r = b.get_raw();
+      pair<size_t, size_t> ofs(b.offset(), b.offset() + b.length());
       pair<uint32_t, uint32_t> ccrc;
       if (r->get_crc(ofs, &ccrc)) {
 	if (ccrc.first == crc) {
@@ -2477,7 +2475,7 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	   * http://crcutil.googlecode.com/files/crc-doc.1.0.pdf
 	   * note, u for our crc32c implementation is 0
 	   */
-	  crc = ccrc.second ^ ceph_crc32c(ccrc.first ^ crc, NULL, it->length());
+	  crc = ccrc.second ^ ceph_crc32c(ccrc.first ^ crc, NULL, b.length());
 	  if (buffer_track_crc)
 	    buffer_cached_crc_adjusted++;
 	}
@@ -2485,7 +2483,7 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	if (buffer_track_crc)
 	  buffer_missed_crc++;
 	uint32_t base = crc;
-	crc = ceph_crc32c(crc, (unsigned char*)it->c_str(), it->length());
+	crc = ceph_crc32c(crc, (unsigned char*)b.c_str(), b.length());
 	r->set_crc(ofs, make_pair(base, crc));
       }
     }
@@ -2495,8 +2493,8 @@ __u32 buffer::list::crc32c(__u32 crc) const
 
 void buffer::list::invalidate_crc()
 {
-  for (std::list<ptr>::const_iterator p = _buffers.begin(); p != _buffers.end(); ++p) {
-    raw *r = p->get_raw();
+  for (auto b : _buffers) {
+    raw *r = b.get_raw();
     if (r) {
       r->invalidate_crc();
     }
