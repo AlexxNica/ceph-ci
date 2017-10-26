@@ -1940,10 +1940,8 @@ public:
   void buffer::list::append(const list& bl)
   {
     _len += bl._len;
-    for (std::list<ptr>::const_iterator p = bl._buffers.begin();
-	 p != bl._buffers.end();
-	 ++p) 
-      _buffers.push_back(*p);
+    for (auto& b : bl._buffers)
+      _buffers.push_back(b);
   }
 
   void buffer::list::append(std::istream& in)
