@@ -708,14 +708,8 @@ namespace buffer CEPH_BUFFER_API {
     void swap(list& other);
     unsigned length() const {
 #if 0
-      // DEBUG: verify _len
-      unsigned len = 0;
-      for (std::list<ptr>::const_iterator it = _buffers.begin();
-	   it != _buffers.end();
-	   it++) {
-	len += (*it).length();
-      }
-      assert(len == _len);
+      std::accumulate(_buffers.begin(), _buffers.end(), 0);
+      ceph_assert(len == _len);
 #endif
       return _len;
     }
