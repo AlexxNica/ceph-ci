@@ -1799,30 +1799,25 @@ public:
     _len += bl._len;
     if (!(flags & CLAIM_ALLOW_NONSHAREABLE))
       bl.make_shareable();
-    _buffers.splice(_buffers.end(), bl._buffers );
+    for (auto&& p : bl._buffers) {
+      _buffers.push_back(std::move(p));
+    }
+    bl._buffers.clear();
     bl._len = 0;
     bl.last_p = bl.begin();
   }
 
   void buffer::list::claim_prepend(list& bl, unsigned int flags)
   {
-    // steal the other guy's buffers
-    _len += bl._len;
-    if (!(flags & CLAIM_ALLOW_NONSHAREABLE))
-      bl.make_shareable();
-    _buffers.splice(_buffers.begin(), bl._buffers );
-    bl._len = 0;
-    bl.last_p = bl.begin();
-    // we modified _buffers
-    last_p = begin();
+    bl.claim_append(*this, flags);
+    bl.swap(*this);
   }
 
   void buffer::list::claim_append_piecewise(list& bl)
   {
     // steal the other guy's buffers
-    for (std::list<buffer::ptr>::const_iterator i = bl.buffers().begin();
-        i != bl.buffers().end(); i++) {
-      append(*i, 0, i->length());
+    for (auto b : bl.buffers()) {
+      append(b, 0, b.length());
     }
     bl.clear();
   }
