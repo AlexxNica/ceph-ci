@@ -1609,14 +1609,8 @@ public:
   }
 
   bool buffer::list::is_zero() const {
-    for (std::list<ptr>::const_iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it) {
-      if (!it->is_zero()) {
-	return false;
-      }
-    }
-    return true;
+    return std::all_of(_buffers.begin(), _buffers.end(),
+		       std::mem_fn(&ptr::is_zero));
   }
 
   void buffer::list::zero()
