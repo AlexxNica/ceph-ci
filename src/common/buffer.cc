@@ -1709,11 +1709,9 @@ public:
   void buffer::list::rebuild(ptr& nb)
   {
     unsigned pos = 0;
-    for (std::list<ptr>::iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it) {
-      nb.copy_in(pos, it->length(), it->c_str(), false);
-      pos += it->length();
+    for (auto& b : _buffers) {
+      nb.copy_in(pos, b.length(), b.c_str(), false);
+      pos += b.length();
     }
     _memcopy_count += pos;
     _buffers.clear();
@@ -1729,10 +1727,10 @@ public:
   }
   
   bool buffer::list::rebuild_aligned_size_and_memory(unsigned align_size,
-  						   unsigned align_memory)
+						     unsigned align_memory)
   {
     unsigned old_memcopy_count = _memcopy_count;
-    std::list<ptr>::iterator p = _buffers.begin();
+    auto p = _buffers.begin();
     while (p != _buffers.end()) {
       // keep anything that's already align and sized aligned
       if (p->is_aligned(align_memory) && p->is_n_align_sized(align_size)) {
