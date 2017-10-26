@@ -1997,22 +1997,18 @@ public:
     if (_buffers.empty())
       return 0;                         // no buffers
 
-    std::list<ptr>::const_iterator iter = _buffers.begin();
-    ++iter;
-
-    if (iter != _buffers.end())
+    if ((++_buffers.begin()) != _buffers.end())
       rebuild();
+
     return _buffers.front().c_str();  // good, we're already contiguous.
   }
 
   string buffer::list::to_str() const {
     string s;
     s.reserve(length());
-    for (std::list<ptr>::const_iterator p = _buffers.begin();
-	 p != _buffers.end();
-	 ++p) {
-      if (p->length()) {
-	s.append(p->c_str(), p->length());
+    for (const auto& b : _buffers) {
+      if (b.length()) {
+	s.append(b.c_str(), b.length());
       }
     }
     return s;
@@ -2028,7 +2024,7 @@ public:
     }
 
     unsigned off = orig_off;
-    std::list<ptr>::iterator curbuf = _buffers.begin();
+    auto curbuf = _buffers.begin();
     while (off > 0 && off >= curbuf->length()) {
       off -= curbuf->length();
       ++curbuf;
@@ -2044,6 +2040,7 @@ public:
 	else
 	  l = 0;
 	tmp.append(*curbuf);
+	// This should be fine in terms of invalidation.
 	curbuf = _buffers.erase(curbuf);
 
       } while (curbuf != _buffers.end() && l > 0);
@@ -2068,7 +2065,7 @@ public:
     clear();
 
     // skip off
-    std::list<ptr>::const_iterator curbuf = other._buffers.begin();
+    auto curbuf = other._buffers.begin();
     while (off > 0 &&
 	   off >= curbuf->length()) {
       // skip this buffer
@@ -2076,13 +2073,13 @@ public:
       off -= (*curbuf).length();
       ++curbuf;
     }
-    assert(len == 0 || curbuf != other._buffers.end());
-    
+    ceph_assert(len == 0 || curbuf != other._buffers.end());
+
     while (len > 0) {
       // partial?
       if (off + len < curbuf->length()) {
 	//cout << "copying partial of " << *curbuf << std::endl;
-	_buffers.push_back( ptr( *curbuf, off, len ) );
+	_buffers.push_back(ptr(*curbuf, off, len));
 	_len += len;
 	break;
       }
@@ -2090,7 +2087,7 @@ public:
       // through end
       //cout << "copying end (all?) of " << *curbuf << std::endl;
       unsigned howmuch = curbuf->length() - off;
-      _buffers.push_back( ptr( *curbuf, off, howmuch ) );
+      _buffers.push_back(ptr(*curbuf, off, howmuch));
       _len += howmuch;
       len -= howmuch;
       off = 0;
