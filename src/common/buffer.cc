@@ -1979,14 +1979,12 @@ public:
     if (n >= _len)
       throw end_of_buffer();
     
-    for (std::list<ptr>::const_iterator p = _buffers.begin();
-	 p != _buffers.end();
-	 ++p) {
-      if (n >= p->length()) {
-	n -= p->length();
+    for (const auto& b : _buffers) {
+      if (n >= b.length()) {
+	n -= b.length();
 	continue;
       }
-      return (*p)[n];
+      return b[n];
     }
     ceph_abort();
   }
