@@ -1843,11 +1843,6 @@ void PG::activate(ObjectStore::Transaction& t,
 	discover_all_missing(query_map);
     }
 
-    // degraded?
-    // XXX: Has _update_calc_stats() run?
-    if (info.stats.stats.sum.num_objects_degraded)
-      state_set(PG_STATE_DEGRADED);
-
     // num_objects_degraded if calculated should reflect this too, unless no
     // missing and we are about to go clean.
     if (get_osdmap()->get_pg_size(info.pgid.pgid) > actingset.size()) {
@@ -1968,6 +1963,11 @@ void PG::all_activated_and_committed()
   assert(peer_activated.size() == actingbackfill.size());
   assert(!actingbackfill.empty());
   assert(blocked_by.empty());
+
+  // Degraded?
+  _update_calc_stats();
+  if (info.stats.stats.sum.num_objects_degraded)
+    state_set(PG_STATE_DEGRADED);
 
   queue_peering_event(
     CephPeeringEvtRef(
@@ -2642,7 +2642,7 @@ void PG::_update_calc_stats()
   info.stats.stats.sum.num_objects_degraded = 0;
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
-  if (!is_clean() && is_peered()) {
+  if (!is_clean() && (is_peered() || is_activating())) {
     dout(20) << __func__ << " not clean" << dendl;
 
     assert(!actingbackfill.empty());
@@ -7038,6 +7038,8 @@ PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
   pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  // XXX: Is this needed?
+  pg->publish_stats_to_osd();
   return transit<WaitLocalBackfillReserved>();
 }
 
@@ -7229,16 +7231,14 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
   }
 
   bool need_publish = false;
-  int64_t before = pg->info.stats.stats.sum.num_objects_degraded;
   pg->_update_calc_stats(); // Too bad this is called again from publish_stats_to_osd()
-  int64_t after = pg->info.stats.stats.sum.num_objects_degraded;
-  if (!before != !after) {
+  int64_t degraded = pg->info.stats.stats.sum.num_objects_degraded;
+  if (!pg->state_test(PG_STATE_DEGRADED) && degraded) {
     need_publish = true;
-    if (after) {
-      pg->state_set(PG_STATE_DEGRADED);
-    } else {
-      pg->state_clear(PG_STATE_DEGRADED);
-    }
+    pg->state_set(PG_STATE_DEGRADED);
+  } else if (pg->state_test(PG_STATE_DEGRADED) && !degraded) {
+    need_publish = true;
+    pg->state_clear(PG_STATE_DEGRADED);
   }
 
   /* Check for changes in pool size (if the acting set changed as a result,
