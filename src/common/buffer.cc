@@ -1531,8 +1531,8 @@ public:
 
     // buffer-wise comparison
     if (true) {
-      std::list<ptr>::const_iterator a = _buffers.begin();
-      std::list<ptr>::const_iterator b = other._buffers.begin();
+      auto a = _buffers.begin();
+      auto b = other._buffers.begin();
       unsigned aoff = 0, boff = 0;
       while (a != _buffers.end()) {
 	unsigned len = a->length() - aoff;
