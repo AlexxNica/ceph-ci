@@ -2652,11 +2652,11 @@ void PG::_update_calc_stats()
     int64_t num_objects = info.stats.stats.sum.num_objects;
 
     // Objects missing from up nodes, sorted by # objects.
-    set<pair<int64_t,pg_shard_t>> missing_target_objects;
+    boost::container::flat_set<pair<int64_t,pg_shard_t>> missing_target_objects;
     // Objects missing from nodes not in up, sort by # objects
-    set<pair<int64_t,pg_shard_t>> acting_source_objects;
+    boost::container::flat_set<pair<int64_t,pg_shard_t>> acting_source_objects;
     // Objects missing on any other peers
-    set<pair<int64_t,pg_shard_t>> peer_source_objects;
+    boost::container::flat_set<pair<int64_t,pg_shard_t>> peer_source_objects;
 
     int64_t missing;
 
@@ -2676,7 +2676,7 @@ void PG::_update_calc_stats()
       // Backfill targets always track num_objects accurately
       // all other peers track missing accurately.
       if (is_backfill_targets(peer.first)) {
-	missing = num_objects - peer.second.stats.stats.sum.num_objects;
+	missing = std::max((int64_t)0, num_objects - peer.second.stats.stats.sum.num_objects);
         if (missing < 0) missing = 0;
       } else {
 	if (peer_missing.count(peer.first)) {
@@ -2712,14 +2712,14 @@ void PG::_update_calc_stats()
 
       if (!acting_source_objects.empty()) {
 	auto extra_copy = acting_source_objects.begin();
-        acting_source_objects.erase(*extra_copy);
         misplaced += m->first - extra_copy->first;
         degraded += extra_copy->first;
+        acting_source_objects.erase(*extra_copy);
       } else if (!peer_source_objects.empty()) {
 	auto extra_copy = peer_source_objects.begin();
-        peer_source_objects.erase(*extra_copy);
         misplaced += m->first - extra_copy->first;
         degraded += extra_copy->first;
+        peer_source_objects.erase(*extra_copy);
       } else {
 	degraded += m->first;
       }
