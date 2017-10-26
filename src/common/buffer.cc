@@ -2166,11 +2166,9 @@ public:
   {
     list s;
     s.substr_of(*this, off, len);
-    for (std::list<ptr>::const_iterator it = s._buffers.begin(); 
-	 it != s._buffers.end(); 
-	 ++it)
-      if (it->length())
-	out.write(it->c_str(), it->length());
+    for (auto b : s._buffers) {
+      if (b.length())
+	out.write(b.c_str(), b.length());
     /*iterator p(this, off);
       while (len > 0 && !p.end()) {
       int l = p.left_in_this_buf();
@@ -2179,6 +2177,7 @@ public:
       out.write(p.c_str(), l);
       len -= l;
       }*/
+    }
   }
   
 void buffer::list::encode_base64(buffer::list& o)
@@ -2358,7 +2357,7 @@ int buffer::list::write_fd(int fd) const
   int iovlen = 0;
   ssize_t bytes = 0;
 
-  std::list<ptr>::const_iterator p = _buffers.begin();
+  auto p = _buffers.begin();
   while (p != _buffers.end()) {
     if (p->length() > 0) {
       iov[iovlen].iov_base = (void *)p->c_str();
@@ -2407,7 +2406,7 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
 {
   iovec iov[IOV_MAX];
 
-  std::list<ptr>::const_iterator p = _buffers.begin();
+  auto p = _buffers.begin();
   uint64_t left_pbrs = _buffers.size();
   while (left_pbrs) {
     ssize_t bytes = 0;
@@ -2444,13 +2443,12 @@ int buffer::list::write_fd_zero_copy(int fd) const
     return -errno;
   if (errno == ESPIPE)
     off_p = NULL;
-  for (std::list<ptr>::const_iterator it = _buffers.begin();
-       it != _buffers.end(); ++it) {
-    int r = it->zero_copy_to_fd(fd, off_p);
+  for (auto& b : _buffers) {
+    int r = b.zero_copy_to_fd(fd, off_p);
     if (r < 0)
       return r;
     if (off_p)
-      offset += it->length();
+      offset += b.length();
   }
   return 0;
 }
@@ -2510,9 +2508,9 @@ void buffer::list::invalidate_crc()
  */
 void buffer::list::write_stream(std::ostream &out) const
 {
-  for (std::list<ptr>::const_iterator p = _buffers.begin(); p != _buffers.end(); ++p) {
-    if (p->length() > 0) {
-      out.write(p->c_str(), p->length());
+  for (auto b : _buffers) {
+    if (b.length() > 0) {
+      out.write(b.c_str(), b.length());
     }
   }
 }
