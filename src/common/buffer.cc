@@ -1584,12 +1584,9 @@ public:
 
   bool buffer::list::is_aligned(unsigned align) const
   {
-    for (std::list<ptr>::const_iterator it = _buffers.begin();
-	 it != _buffers.end();
-	 ++it) 
-      if (!it->is_aligned(align))
-	return false;
-    return true;
+    using std::placeholders::_1;
+    return std::all_of(_buffers.begin(), _buffers.end(),
+		       std::bind(std::mem_fn(&ptr::is_aligned), _1, align));
   }
 
   bool buffer::list::is_n_align_sized(unsigned align) const
