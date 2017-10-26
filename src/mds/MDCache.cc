@@ -5568,7 +5568,7 @@ void MDCache::prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t i
   if (splits.count(client) == 0) {
     splits[client] = snap = new MClientSnap(CEPH_SNAP_OP_SPLIT);
     snap->head.split = realm->inode->ino();
-    realm->build_snap_trace(snap->bl);
+    snap->bl = realm->get_snap_trace();
 
     for (set<SnapRealm*>::iterator p = realm->open_children.begin();
 	 p != realm->open_children.end();
@@ -5587,7 +5587,6 @@ void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
 
   vector<inodeno_t> split_inos;
   vector<inodeno_t> split_realms;
-  bufferlist snapbl;
 
   for (elist<CInode*>::iterator p = realm->inodes_with_caps.begin(member_offset(CInode, item_caps));
        !p.end();
@@ -5597,7 +5596,6 @@ void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
        p != realm->open_children.end();
        ++p)
     split_realms.push_back((*p)->inode->ino());
-  parent_realm->build_snap_trace(snapbl);
 
   for (auto p : realm->client_caps) {
     assert(!p.second->empty());
@@ -5607,7 +5605,7 @@ void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
       update->head.split = parent_realm->inode->ino();
       update->split_inos = split_inos;
       update->split_realms = split_realms;
-      update->bl = snapbl;
+      update->bl = parent_realm->get_snap_trace();
     }
   }
 }
@@ -5784,7 +5782,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
 					cap->pending(), cap->wanted(), 0,
 					cap->get_mseq(), mds->get_osd_epoch_barrier());
     in->encode_cap_message(reap, cap);
-    realm->build_snap_trace(reap->snapbl);
+    reap->snapbl = realm->get_snap_trace();
     reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
     mds->send_message_client_counted(reap, session);
   } else {
@@ -5966,7 +5964,7 @@ void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snap
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
     if (session) {
       MClientSnap *snap = new MClientSnap(CEPH_SNAP_OP_UPDATE);
-      realm->build_snap_trace(snap->bl);
+      snap->bl = realm->get_snap_trace();
       mds->send_message_client_counted(snap, session);
     } else {
       dout(10) << " ...or not, no session for this client!" << dendl;
@@ -9447,7 +9445,6 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
 
   vector<inodeno_t> split_inos;
   vector<inodeno_t> split_realms;
-  bufferlist snapbl;
 
   if (notify_clients) {
     assert(in->snaprealm->have_past_parents_open());
@@ -9462,7 +9459,6 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
 	   ++p)
 	split_realms.push_back((*p)->inode->ino());
     }
-    in->snaprealm->build_snap_trace(snapbl);
   }
 
   set<SnapRealm*> past_children;
@@ -9486,7 +9482,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
 	  update->head.split = in->ino();
 	  update->split_inos = split_inos;
 	  update->split_realms = split_realms;
-	  update->bl = snapbl;
+	  update->bl = in->snaprealm->get_snap_trace();
 	  updates[p->first] = update;
 	}
       }
