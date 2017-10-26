@@ -1524,11 +1524,6 @@ public:
     other.last_p = other.begin();
   }
 
-  bool buffer::list::contents_equal(buffer::list& other)
-  {
-    return static_cast<const buffer::list*>(this)->contents_equal(other);
-  }
-
   bool buffer::list::contents_equal(const ceph::buffer::list& other) const
   {
     if (length() != other.length())
