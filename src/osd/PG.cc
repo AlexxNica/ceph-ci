@@ -2662,13 +2662,13 @@ void PG::_update_calc_stats()
 
     // Primary first
     missing = pg_log.get_missing().num_missing();
-    info.stats.stats.sum.num_objects_missing_on_primary = missing;
     assert(actingbackfill.count(pg_whoami));
     if (upset.count(pg_whoami)) {
       missing_target_objects.insert(make_pair(missing, pg_whoami));
     } else {
       acting_source_objects.insert(make_pair(missing, pg_whoami));
     }
+    info.stats.stats.sum.num_objects_missing_on_primary = missing;
 
     // All other peers
     for (auto& peer : peer_info) {
@@ -2685,7 +2685,6 @@ void PG::_update_calc_stats()
 	  dout(20) << __func__ << " no peer_mssing found for " << peer.first << dendl;
         }
       }
-      peer.second.stats.stats.sum.num_objects_missing = missing;
       if (upset.count(peer.first)) {
 	missing_target_objects.insert(make_pair(missing, peer.first));
       } else if (actingbackfill.count(peer.first)) {
@@ -2693,6 +2692,7 @@ void PG::_update_calc_stats()
       } else {
 	peer_source_objects.insert(make_pair(missing, peer.first));
       }
+      peer.second.stats.stats.sum.num_objects_missing = missing;
     }
 
     for (const auto& item : missing_target_objects)
