@@ -2655,8 +2655,6 @@ void PG::_update_calc_stats()
     boost::container::flat_set<pair<int64_t,pg_shard_t>> missing_target_objects;
     // Objects missing from nodes not in up, sort by # objects
     boost::container::flat_set<pair<int64_t,pg_shard_t>> acting_source_objects;
-    // Objects missing on any other peers
-    boost::container::flat_set<pair<int64_t,pg_shard_t>> peer_source_objects;
 
     int64_t missing;
 
@@ -2672,6 +2670,10 @@ void PG::_update_calc_stats()
 
     // All other peers
     for (auto& peer : peer_info) {
+      // Ignore other peers until we add code to look at detailed missing
+      // information. (recovery)
+      if (!actingbackfill.count(peer.first))
+	continue;
       missing = 0;
       // Backfill targets always track num_objects accurately
       // all other peers track missing accurately.
@@ -2687,10 +2689,8 @@ void PG::_update_calc_stats()
       }
       if (upset.count(peer.first)) {
 	missing_target_objects.insert(make_pair(missing, peer.first));
-      } else if (actingbackfill.count(peer.first)) {
-	acting_source_objects.insert(make_pair(missing, peer.first));
       } else {
-	peer_source_objects.insert(make_pair(missing, peer.first));
+	acting_source_objects.insert(make_pair(missing, peer.first));
       }
       peer.second.stats.stats.sum.num_objects_missing = missing;
     }
@@ -2699,8 +2699,6 @@ void PG::_update_calc_stats()
       dout(20) << __func__ << " missing shard " << item.second << " missing= " << item.first << dendl;
     for (const auto& item : acting_source_objects)
       dout(20) << __func__ << " acting shard " << item.second << " missing=" << item.first << dendl;
-    for (const auto& item : peer_source_objects)
-      dout(20) << __func__ << " peer shard " << item.second << " missing=" << item.first << dendl;
 
     // A misplaced object is not stored on the correct OSD
     int64_t misplaced = 0;
@@ -2716,10 +2714,6 @@ void PG::_update_calc_stats()
 	auto extra_copy = acting_source_objects.begin();
 	extra_missing = extra_copy->first;
         acting_source_objects.erase(*extra_copy);
-      } else if (!peer_source_objects.empty()) {
-	auto extra_copy = peer_source_objects.begin();
-	extra_missing = extra_copy->first;
-        peer_source_objects.erase(*extra_copy);
       }
 
       if (extra_missing >= 0 && m->first >= extra_missing) {
