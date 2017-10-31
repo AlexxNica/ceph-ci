@@ -10733,7 +10733,6 @@ int BlueStore::_do_remove(
   bool is_gen = !o->oid.is_no_gen();
   _do_truncate(txc, c, o, 0, is_gen ? &maybe_unshared_blobs : nullptr);
   if (o->onode.has_omap()) {
-    o->flush();
     _do_omap_clear(txc,
 		   o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP,
 		   o->onode.nid);
@@ -10949,7 +10948,6 @@ int BlueStore::_omap_clear(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
   if (o->onode.has_omap()) {
-    o->flush();
     _do_omap_clear(txc,
 		   o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP,
 		   o->onode.nid);
@@ -11078,7 +11076,6 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
   {
     const string& prefix =
       o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
-    o->flush();
     get_omap_key(o->onode.nid, first, &key_first);
     get_omap_key(o->onode.nid, last, &key_last);
     txc->t->rm_range_keys(prefix, key_first, key_last);
@@ -11156,7 +11153,6 @@ int BlueStore::_clone(TransContext *txc,
   // clone omap
   if (newo->onode.has_omap()) {
     dout(20) << __func__ << " clearing old omap data" << dendl;
-    newo->flush();
     _do_omap_clear(txc,
 		   newo->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP
 		   : PREFIX_OMAP,
