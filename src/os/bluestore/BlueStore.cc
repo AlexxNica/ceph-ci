@@ -8787,7 +8787,9 @@ void BlueStore::_kv_finalize_thread()
       }
 
       // this is as good a place as any ...
-      _reap_collections();
+      // _queue_reap_collection in this thread. So this judgement don't protected by reap_lock.
+      if (!removed_collections.empty())
+	_reap_collections();
 
       l.lock();
     }
