@@ -58,6 +58,21 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}")
 
+include(CheckCXXSourceCompiles)
+CHECK_CXX_SOURCE_COMPILES("
+int main() {
+#ifdef __GLIBCXX__
+#if __GLIBCXX__ < 20150422ul /* libstdc++ < 5.1.0 */
+#error slow std::list::size()
+#endif
+#endif
+}
+" HAVE_GLIBCXX_5_1)
+if(NOT HAVE_GLIBCXX_5_1)
+  # libc++'s list::size() is O(1) also.
+  message(WARNING "performance regression is expected due to an O(n) implementation of 'std::list::size()' in libstdc++ older than 5.1.0")
+endif()
+
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE)
 endif()
