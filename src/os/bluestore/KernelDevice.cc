@@ -592,9 +592,16 @@ int KernelDevice::write(
 	   << dendl;
   assert(is_valid_io(off, len));
 
-  if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
-      bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
-    dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
+  if ((!buffered || bl.get_num_buffers() >= IOV_MAX)) {
+    uint64_t aligned_size = block_size;
+    // Avoid after rebuild_aligned_size_and_memory, get_num_buffers() > IOV_MAX
+    if (bl.get_num_buffers() >= IOV_MAX && len > (IOV_MAX * block_size)) {
+      aligned_size = ROUND_UP_TO(ROUND_UP_TO(len, IOV_MAX) / IOV_MAX, block_size);
+    }
+    if (bl.rebuild_aligned_size_and_memory(aligned_size, block_size)) {
+      dout(20) << __func__ << " rebuilding buffer to be aligned by aligned_size: "
+	       <<  aligned_size << dendl;
+    }
   }
   dout(40) << "data: ";
   bl.hexdump(*_dout);
@@ -619,10 +626,18 @@ int KernelDevice::aio_write(
   assert(off < size);
   assert(off + len <= size);
 
-  if ((!buffered || bl.get_num_buffers() >= IOV_MAX) &&
-      bl.rebuild_aligned_size_and_memory(block_size, block_size)) {
-    dout(20) << __func__ << " rebuilding buffer to be aligned" << dendl;
+  if ((!buffered || bl.get_num_buffers() >= IOV_MAX)) {
+    uint64_t aligned_size = block_size;
+    // Avoid after rebuild_aligned_size_and_memory, get_num_buffers() > IOV_MAX
+    if (bl.get_num_buffers() >= IOV_MAX && len > (IOV_MAX * block_size)) {
+      aligned_size = ROUND_UP_TO(ROUND_UP_TO(len, IOV_MAX) / IOV_MAX, block_size);
+    }
+    if (bl.rebuild_aligned_size_and_memory(aligned_size, block_size)) {
+      dout(20) << __func__ << " rebuilding buffer to be aligned by aligned_size: "
+	       <<  aligned_size << dendl;
+    }
   }
+
   dout(40) << "data: ";
   bl.hexdump(*_dout);
   *_dout << dendl;
