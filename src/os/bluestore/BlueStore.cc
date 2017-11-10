@@ -6307,11 +6307,8 @@ void BlueStore::_reap_collections()
     removed_colls.swap(removed_collections);
   }
 
-  bool all_reaped = true;
-
-  for (list<CollectionRef>::iterator p = removed_colls.begin();
-       p != removed_colls.end();
-       ++p) {
+  list<CollectionRef>::iterator p = removed_colls.begin();
+  while (p != removed_colls.end()) {
     CollectionRef c = *p;
     dout(10) << __func__ << " " << c << " " << c->cid << dendl;
     if (c->onode_map.map_any([&](OnodeRef o) {
@@ -6323,15 +6320,18 @@ void BlueStore::_reap_collections()
 	  }
 	  return true;
 	})) {
-      all_reaped = false;
+      ++p;
       continue;
     }
     c->onode_map.clear();
+    p = removed_colls.erase(p);
     dout(10) << __func__ << " " << c << " " << c->cid << " done" << dendl;
   }
-
-  if (all_reaped) {
+  if (removed_colls.empty()) {
     dout(10) << __func__ << " all reaped" << dendl;
+  } else {
+    std::lock_guard<std::mutex> l(reap_lock);
+    removed_collections.splice(removed_collections.begin(), removed_colls);
   }
 }
 
@@ -8781,7 +8781,9 @@ void BlueStore::_kv_finalize_thread()
       }
 
       // this is as good a place as any ...
-      _reap_collections();
+      // _queue_reap_collection in this thread. So this judgement don't protected by reap_lock.
+      if (!removed_collections.empty())
+	_reap_collections();
 
       l.lock();
     }
