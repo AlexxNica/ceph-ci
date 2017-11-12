@@ -124,7 +124,6 @@ BuildRequires:	fuse-devel
 # devtoolset offers newer make and valgrind-devel, but the old ones are good
 # enough.
 BuildRequires:	devtoolset-7-gcc-c++
-BuildRequires:	devtoolset-7-binutils
 %else
 BuildRequires:	gcc-c++
 %endif
