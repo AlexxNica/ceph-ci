@@ -2069,6 +2069,13 @@ docompareandwrite(unsigned offset, unsigned size)
         if (o_direct)
                 size -= size % writebdy;
 
+        if (skip_partial_discard) {
+                if (!quiet && testcalls > simulatedopcount && !o_direct)
+                        prt("compare and write disabled\n");
+                log4(OP_SKIPPED, OP_COMPARE_AND_WRITE, offset, size);
+                return;
+        }
+
         if (size == 0) {
                 if (!quiet && testcalls > simulatedopcount && !o_direct)
                         prt("skipping zero size read\n");
