@@ -32,6 +32,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         devel/gperf \
         devel/gmake \
         devel/cmake \
+        devel/cunit \
         devel/yasm \
         devel/boost-all \
         devel/boost-python-libs \
