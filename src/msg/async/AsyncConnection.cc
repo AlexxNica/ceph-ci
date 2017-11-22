@@ -639,15 +639,8 @@ void AsyncConnection::process()
       case STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH:
         {
           ceph_msg_footer footer;
-          ceph_msg_footer_old old_footer;
-          unsigned len;
-          // footer
-          if (has_feature(CEPH_FEATURE_MSG_AUTH))
-            len = sizeof(footer);
-          else
-            len = sizeof(old_footer);
 
-          r = read_until(len, state_buffer);
+          r = read_until(sizeof(footer), state_buffer);
           if (r < 0) {
             ldout(async_msgr->cct, 1) << __func__ << " read footer data error " << dendl;
             goto fail;
@@ -655,16 +648,7 @@ void AsyncConnection::process()
             break;
           }
 
-          if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
-            footer = *((ceph_msg_footer*)state_buffer);
-          } else {
-            old_footer = *((ceph_msg_footer_old*)state_buffer);
-            footer.front_crc = old_footer.front_crc;
-            footer.middle_crc = old_footer.middle_crc;
-            footer.data_crc = old_footer.data_crc;
-            footer.sig = 0;
-            footer.flags = old_footer.flags;
-          }
+          footer = *((ceph_msg_footer*)state_buffer);
           int aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
           ldout(async_msgr->cct, 10) << __func__ << " aborted = " << aborted << dendl;
           if (aborted) {
@@ -2215,22 +2199,7 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
     outcoming_bl.claim_append(bl);  
   }
 
-  // send footer; if receiver doesn't support signatures, use the old footer format
-  ceph_msg_footer_old old_footer;
-  if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
-    outcoming_bl.append((char*)&footer, sizeof(footer));
-  } else {
-    if (msgr->crcflags & MSG_CRC_HEADER) {
-      old_footer.front_crc = footer.front_crc;
-      old_footer.middle_crc = footer.middle_crc;
-      old_footer.data_crc = footer.data_crc;
-    } else {
-       old_footer.front_crc = old_footer.middle_crc = 0;
-    }
-    old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
-    old_footer.flags = footer.flags;
-    outcoming_bl.append((char*)&old_footer, sizeof(old_footer));
-  }
+  outcoming_bl.append((char*)&footer, sizeof(footer));
 
   m->trace.event("async writing message");
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()
