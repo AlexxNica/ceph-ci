@@ -1594,6 +1594,7 @@ def update_partition(dev, description):
     if not partprobe_ok:
         raise Error('partprobe %s failed : %s' % (dev, error))
     command_check_call(['udevadm', 'settle', '--timeout=600'])
+    command_check_call(['fdisk', '-l'])
 
 
 def zap_linux(dev):
