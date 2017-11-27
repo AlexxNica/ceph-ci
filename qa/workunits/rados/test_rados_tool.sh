@@ -181,6 +181,7 @@ for i in `seq 1 5`; do
     run_expect_succ "$RADOS_TOOL" -p "$POOL" setomapval $objname key.$j "$rand_str"
   done
   run_expect_succ --tee "$fname.omap.vals" "$RADOS_TOOL" -p "$POOL" listomapvals $objname
+  run_expect_succ "$RADOS_TOOL" -p "$POOL" clearomap $objname
 done
 
 run_expect_succ "$RADOS_TOOL" cppool "$POOL" "$POOL_CP_TARGET"
