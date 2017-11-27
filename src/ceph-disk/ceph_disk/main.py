@@ -1292,6 +1292,8 @@ def get_dmcrypt_key(
     path = os.path.join(STATEDIR, 'osd-lockbox', _uuid)
     if os.path.exists(path):
         mode = get_oneliner(path, 'key-management-mode')
+        if mode is None:
+            raise Error('unable to read key-management-mode from %s' % path)
         osd_uuid = get_oneliner(path, 'osd-uuid')
         ceph_fsid = read_one_line(path, 'ceph_fsid')
         if ceph_fsid is None:
@@ -2764,6 +2766,7 @@ class Lockbox(object):
         write_one_line(path, 'whoami', osd_id)
         secrets.write_osd_keyring(os.path.join(path, 'osd_keyring'), osd_id)
         write_one_line(path, 'key-management-mode', KEY_MANAGEMENT_MODE_V1)
+        LOG.debug('writing kmm to %s', path)
 
     def symlink_spaces(self, path):
         target = self.get_mount_point()
@@ -4240,6 +4243,8 @@ def is_swap(dev):
 
 
 def get_oneliner(base, name):
+    out, err, ret = command(['ls', 'base', '-la'])
+    LOG.debug('out = %s, err = %s, ret = %r', out, err, ret)
     path = os.path.join(base, name)
     if os.path.isfile(path):
         with open(path, 'rb') as _file:
