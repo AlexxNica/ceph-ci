@@ -275,7 +275,7 @@ version_t AuthMonitor::get_trim_to() const
 {
   unsigned max = g_conf->paxos_max_join_drift * 2;
   version_t version = get_last_committed();
-  if (mon->is_leader() && (version > max))
+  if (version > max)
     return version - max;
   return 0;
 }
