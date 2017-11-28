@@ -28,6 +28,7 @@
 #include "include/rados/rados_types.hpp"
 #include "include/mempool.h"
 
+#include "dmclock/src/dmclock_server.h"
 #include "msg/msg_types.h"
 #include "include/types.h"
 #include "include/utime.h"
@@ -1400,6 +1401,8 @@ public:
   /// application -> key/value metadata
   map<string, std::map<string, string>> application_metadata;
 
+  crimson::dmclock::ClientInfo dmc_cli_info;
+
 private:
   vector<uint32_t> grade_table;
 
@@ -1418,38 +1421,7 @@ public:
     }
   }
 
-  pg_pool_t()
-    : flags(0), type(0), size(0), min_size(0),
-      crush_rule(0), object_hash(0),
-      pg_num(0), pgp_num(0),
-      last_change(0),
-      last_force_op_resend(0),
-      last_force_op_resend_preluminous(0),
-      snap_seq(0), snap_epoch(0),
-      auid(0),
-      quota_max_bytes(0), quota_max_objects(0),
-      pg_num_mask(0), pgp_num_mask(0),
-      tier_of(-1), read_tier(-1), write_tier(-1),
-      cache_mode(CACHEMODE_NONE),
-      target_max_bytes(0), target_max_objects(0),
-      cache_target_dirty_ratio_micro(0),
-      cache_target_dirty_high_ratio_micro(0),
-      cache_target_full_ratio_micro(0),
-      cache_min_flush_age(0),
-      cache_min_evict_age(0),
-      hit_set_params(),
-      hit_set_period(0),
-      hit_set_count(0),
-      use_gmt_hitset(true),
-      min_read_recency_for_promote(0),
-      min_write_recency_for_promote(0),
-      hit_set_grade_decay_rate(0),
-      hit_set_search_last_n(0),
-      stripe_width(0),
-      expected_num_objects(0),
-      fast_read(false),
-      opts()
-  { }
+  pg_pool_t();
 
   void dump(Formatter *f) const;
 
@@ -1554,6 +1526,31 @@ public:
   void set_last_force_op_resend(uint64_t t) {
     last_force_op_resend = t;
     last_force_op_resend_preluminous = t;
+  }
+
+  void set_mclock_res(double mclock_res) {
+    dmc_cli_info.reservation = mclock_res; 
+    dmc_cli_info.reservation_inv = (0.0 == mclock_res ? 0.0 : 1.0 / mclock_res);
+  }
+  void set_mclock_wgt(double mclock_wgt) {
+    dmc_cli_info.weight = mclock_wgt;
+    dmc_cli_info.weight_inv = (0.0 == mclock_wgt ? 0.0 : 1.0 / mclock_wgt);
+  }
+  void set_mclock_lim(double mclock_lim) {
+    dmc_cli_info.limit = mclock_lim;
+    dmc_cli_info.limit_inv = (0.0 == mclock_lim ? 0.0 : 1.0 / mclock_lim);
+  }
+  double get_mclock_res() const { return dmc_cli_info.reservation; }
+  double get_mclock_wgt() const { return dmc_cli_info.weight; }
+  double get_mclock_lim() const { return dmc_cli_info.limit; }
+
+  const crimson::dmclock::ClientInfo& get_dmc_client_info() const {
+    return dmc_cli_info;
+  }
+  void calc_dmc_cli_info() {
+    dmc_cli_info.reservation_inv = (0.0 == dmc_cli_info.reservation ? 0.0 : 1.0 / dmc_cli_info.reservation);
+    dmc_cli_info.weight_inv = (0.0 == dmc_cli_info.weight ? 0.0 : 1.0 / dmc_cli_info.weight);
+    dmc_cli_info.limit_inv = (0.0 == dmc_cli_info.limit ? 0.0 : 1.0 / dmc_cli_info.limit);
   }
 
   void calc_pg_masks();
