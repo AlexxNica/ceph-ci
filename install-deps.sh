@@ -31,10 +31,12 @@ function ensure_decent_gcc_on_deb {
     # new enough
     local old=$(gcc -dumpversion)
     local new=$1
-    if dpkg --compare-versions $old ge 5.1; then
+    if dpkg --compare-versions $old ge 7.0; then
 	return
     fi
 
+    old=$(readlink -e /usr/bin/gcc | cut -d'-' -f2)
+    $SUDO update-alternatives --remove-all gcc || true
     $SUDO update-alternatives \
 	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
 	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
@@ -139,7 +141,7 @@ else
         $SUDO apt-get install -y lsb-release devscripts equivs
         $SUDO apt-get install -y dpkg-dev
         case "$VERSION" in
-            *Trusty*)
+            *Trusty*|*Xenial*)
                 $SUDO apt-get install -y software-properties-common
                 $SUDO add-apt-repository ppa:ubuntu-toolchain-r/test
                 $SUDO apt-get update
