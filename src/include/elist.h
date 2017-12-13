@@ -40,8 +40,8 @@ public:
     }
 
     // no copying!
-    item(const item& other);
-    const item& operator= (const item& right);
+    item(const item& other) = delete;
+    const item& operator= (const item& right) = delete;
 
     
     bool empty() const { return _prev == this; }
