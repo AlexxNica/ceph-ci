@@ -1604,6 +1604,8 @@ template <typename I>
 void ImageReplayer<I>::handle_shut_down(int r) {
   reschedule_update_status_task(-1);
 
+  bool resync_requested = false;
+  bool delete_requested = false;
   bool unregister_asok_hook = false;
   {
     Mutex::Locker locker(m_lock);
@@ -1621,28 +1623,16 @@ void ImageReplayer<I>::handle_shut_down(int r) {
       return;
     }
 
-    bool delete_requested = false;
     if (m_delete_requested && !m_local_image_id.empty()) {
       assert(m_remote_image.image_id.empty());
       dout(0) << "remote image no longer exists: scheduling deletion" << dendl;
-      delete_requested = true;
+      unregister_asok_hook = true;
+      std::swap(delete_requested, m_delete_requested);
     }
-    if (delete_requested || m_resync_requested) {
-      m_local_image_id = "";
-      bool resync_requested = false;
-      std::swap(resync_requested, m_resync_requested);
-      if (m_delete_requested) {
-        unregister_asok_hook = true;
-        m_delete_requested = false;
-      }
 
-      dout(5) << "moving image to trash" << dendl;
-      auto ctx = new FunctionContext([this, r](int) {
-          handle_shut_down(r);
-        });
-      ImageDeleter<I>::trash_move(*m_local_ioctx, m_global_image_id,
-                                  resync_requested, m_threads->work_queue, ctx);
-      return;
+    std::swap(resync_requested, m_resync_requested);
+    if (delete_requested || resync_requested) {
+      m_local_image_id = "";
     } else if (m_last_r == -ENOENT &&
                m_local_image_id.empty() && m_remote_image.image_id.empty()) {
       dout(0) << "mirror image no longer exists" << dendl;
@@ -1653,6 +1643,16 @@ void ImageReplayer<I>::handle_shut_down(int r) {
 
   if (unregister_asok_hook) {
     unregister_admin_socket_hook();
+  }
+
+  if (delete_requested || resync_requested) {
+    dout(5) << "moving image to trash" << dendl;
+    auto ctx = new FunctionContext([this, r](int) {
+      handle_shut_down(r);
+    });
+    ImageDeleter<I>::trash_move(*m_local_ioctx, m_global_image_id,
+                                resync_requested, m_threads->work_queue, ctx);
+    return;
   }
 
   dout(20) << "stop complete" << dendl;
