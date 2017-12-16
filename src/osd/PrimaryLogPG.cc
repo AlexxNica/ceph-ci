@@ -8818,6 +8818,12 @@ void PrimaryLogPG::process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, in
     }
     obs.oi.clear_data_digest();
     ctx->at_version = get_next_version(); 
+    if (!ctx->lock_manager.take_write_lock(
+	  obj_cop->obc->obs.oi.soid,
+	  obj_cop->obc)) {
+      assert(0 == "problem!");
+    }
+    dout(20) << __func__ << " took lock on obc, " << obj_cop->obc->rwstate << dendl;
     finish_ctx(ctx.get(), pg_log_entry_t::PROMOTE);
     simple_opc_submit(std::move(ctx));
 
