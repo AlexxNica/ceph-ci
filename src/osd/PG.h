@@ -1747,9 +1747,6 @@ protected:
   TrivialEvent(Load)
   TrivialEvent(GotInfo)
   TrivialEvent(NeedUpThru)
-  public:
-  TrivialEvent(NullEvt)
-  protected:
   TrivialEvent(FlushedEvt)
   TrivialEvent(Backfilled)
   TrivialEvent(LocalBackfillReserved)
