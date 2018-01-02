@@ -3788,6 +3788,7 @@ PGRef OSD::_open_pg(
   {
     RWLock::WLocker l(pg_map_lock);
     pg_map[pgid] = pg;
+    pg_map_size = pg_map.size();
     pg->get("PGMap");  // because it's in pg_map
     service.pg_add_epoch(pg->pg_id, createmap->get_epoch());
     service.init_splits_between(pgid, createmap, servicemap);
@@ -3881,6 +3882,7 @@ PGRef OSD::_lookup_pg(spg_t pgid)
 	return pg;
       }
       pg_map.erase(p);
+      pg_map_size = pg_map.size();
       pg->put("PGMap");
     }
     return nullptr;
@@ -4159,10 +4161,10 @@ bool OSD::maybe_wait_for_max_pg(spg_t pgid, bool is_mon_create)
     (cct->_conf->get_val<uint64_t>("mon_max_pg_per_osd") *
      cct->_conf->get_val<double>("osd_max_pg_per_osd_hard_ratio"));
 
-  RWLock::RLocker pg_map_locker{pg_map_lock};
-  if (pg_map.size() < max_pgs_per_osd) {
+  if (pg_map_size < max_pgs_per_osd) {
     return false;
   }
+
   [[gnu::unused]] auto&& pending_creates_locker = guardedly_lock(pending_creates_lock);
   if (is_mon_create) {
     pending_creates_from_mon++;
@@ -7752,6 +7754,7 @@ void OSD::_finish_splits(set<PGRef>& pgs)
     pg_map_lock.get_write();
     pg->get("PGMap");  // For pg_map
     pg_map[pg->get_pgid()] = pg;
+    pg_map_size = pg_map.size();
     service.complete_split(pg->get_pgid());
     service.pg_add_epoch(pg->pg_id, e);
     pg_map_lock.put_write();
@@ -8890,6 +8893,7 @@ void OSD::dequeue_peering_evt(
 	  p->second == pg) {
 	dout(20) << __func__ << " removed pg " << pg << " from pg_map" << dendl;
 	pg_map.erase(p);
+	pg_map_size = pg_map.size();
 	pg->put("PGMap");
       } else {
 	dout(20) << __func__ << " failed to remove pg " << pg << " from pg_map" << dendl;
