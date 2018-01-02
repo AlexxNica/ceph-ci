@@ -4342,7 +4342,10 @@ int BlueStore::_open_fm(bool create)
       bl.append(freelist_type);
       t->set(PREFIX_SUPER, "freelist_type", bl);
     }
-    fm->create(bdev->get_size(), min_alloc_size, t);
+    // being able to allocate in units less than bdev block size 
+    // seems to be a bad idea.
+    assert( cct->_conf->bdev_block_size <= (int64_t)min_alloc_size);
+    fm->create(bdev->get_size(), (int64_t)min_alloc_size, t);
 
     // allocate superblock reserved space.  note that we do not mark
     // bluefs space as allocated in the freelist; we instead rely on
@@ -5676,6 +5679,7 @@ int BlueStore::_fsck_check_extents(
   const PExtentVector& extents,
   bool compressed,
   mempool_dynamic_bitset &used_blocks,
+  uint64_t granularity,
   store_statfs_t& expected_statfs)
 {
   dout(30) << __func__ << " oid " << oid << " extents " << extents << dendl;
@@ -5689,8 +5693,9 @@ int BlueStore::_fsck_check_extents(
     }
     bool already = false;
     apply(
-      e.offset, e.length, min_alloc_size, used_blocks,
+      e.offset, e.length, granularity, used_blocks,
       [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	assert(pos < bs.size());
 	if (bs.test(pos))
 	  already = true;
 	else
@@ -5795,10 +5800,11 @@ int BlueStore::_fsck(bool deep, bool repair)
   if (r < 0)
     goto out_scan;
 
-  used_blocks.resize(bdev->get_size() / min_alloc_size);
+  used_blocks.resize(fm->get_alloc_units());
   apply(
-    0, MAX(min_alloc_size, SUPER_RESERVED), min_alloc_size, used_blocks,
+    0, MAX(min_alloc_size, SUPER_RESERVED), fm->get_alloc_size(), used_blocks,
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	assert(pos < bs.size());
       bs.set(pos);
     }
   );
@@ -5806,8 +5812,9 @@ int BlueStore::_fsck(bool deep, bool repair)
   if (bluefs) {
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+        e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	assert(pos < bs.size());
           bs.set(pos);
         }
 	);
@@ -6094,6 +6101,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  errors += _fsck_check_extents(oid, blob.get_extents(),
 					blob.is_compressed(),
 					used_blocks,
+					fm->get_alloc_size(),
 					expected_statfs);
         }
       }
@@ -6158,7 +6166,9 @@ int BlueStore::_fsck(bool deep, bool repair)
 	errors += _fsck_check_extents(p->second.oids.front(),
 				      extents,
 				      p->second.compressed,
-				      used_blocks, expected_statfs);
+				      used_blocks,
+				      fm->get_alloc_size(),
+				      expected_statfs);
 	sb_info.erase(p);
       }
     }
@@ -6220,8 +6230,9 @@ int BlueStore::_fsck(bool deep, bool repair)
 	       << " released 0x" << std::hex << wt.released << std::dec << dendl;
       for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
         apply(
-          e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+          e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	assert(pos < bs.size());
             bs.set(pos);
           }
         );
@@ -6235,8 +6246,9 @@ int BlueStore::_fsck(bool deep, bool repair)
     // know they are allocated.
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+        e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	assert(pos < bs.size());
 	  bs.reset(pos);
         }
       );
@@ -6246,8 +6258,9 @@ int BlueStore::_fsck(bool deep, bool repair)
     while (fm->enumerate_next(&offset, &length)) {
       bool intersects = false;
       apply(
-        offset, length, min_alloc_size, used_blocks,
+        offset, length, fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	  assert(pos < bs.size());
           if (bs.test(pos)) {
             intersects = true;
           } else {
@@ -6287,8 +6300,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  size_t next = used_blocks.find_next(cur);
 	  if (next != cur + 1) {
 	    derr << "fsck error: leaked extent 0x" << std::hex
-		 << ((uint64_t)start * min_alloc_size) << "~"
-		 << ((cur + 1 - start) * min_alloc_size) << std::dec
+		 << ((uint64_t)start * fm->get_alloc_size()) << "~"
+		 << ((cur + 1 - start) * fm->get_alloc_size()) << std::dec
 		 << dendl;
 	    start = next;
 	    break;
