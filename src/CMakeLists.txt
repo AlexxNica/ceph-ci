@@ -682,7 +682,6 @@ if(WITH_DPDK)
 endif(WITH_DPDK)
 
 add_library(common STATIC ${ceph_common_objs})
-target_link_libraries(common ${ceph_common_deps})
 
 add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
@@ -693,8 +692,12 @@ set_target_properties(ceph-common PROPERTIES
 if(WITH_STATIC_LIBSTDCXX)
   set_target_properties(ceph-common PROPERTIES
     LINK_FLAGS "-static-libstdc++ -static-libgcc")
-  set_target_properties(common PROPERTIES
-    LINK_FLAGS "-static-libstdc++ -static-libgcc")
+  target_link_libraries(common
+    PRIVATE ${ceph_common_deps}
+    INTERFACE "-static-libstdc++ -static-libgcc")
+else()
+  target_link_libraries(common
+    PRIVATE ${ceph_common_deps})
 endif()
 install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 
@@ -998,7 +1001,7 @@ if(WITH_LIBCEPHFS)
     ceph_syn.cc
     client/SyntheticClient.cc)
   add_executable(ceph-syn ${ceph_syn_srcs})
-  target_link_libraries(ceph-syn client global-static common)
+  target_link_libraries(ceph-syn client global-static ceph-common)
 
   set(mount_ceph_srcs
     mount/mount.ceph.c)
@@ -1019,7 +1022,7 @@ if(WITH_FUSE)
     client/fuse_ll.cc)
   add_executable(ceph-fuse ${ceph_fuse_srcs})
   target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
-    client common global-static)
+    client ceph-common global-static)
   set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
   install(TARGETS ceph-fuse DESTINATION bin)
   install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
