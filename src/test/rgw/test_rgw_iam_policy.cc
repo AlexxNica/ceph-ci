@@ -33,7 +33,6 @@ using boost::container::flat_set;
 using boost::intrusive_ptr;
 using boost::make_optional;
 using boost::none;
-using boost::optional;
 
 using rgw::auth::Identity;
 using rgw::auth::Principal;
@@ -127,7 +126,7 @@ public:
 };
 
 TEST_F(PolicyTest, Parse1) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example1)));
@@ -178,7 +177,7 @@ TEST_F(PolicyTest, Eval1) {
 }
 
 TEST_F(PolicyTest, Parse2) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example2)));
@@ -259,7 +258,7 @@ TEST_F(PolicyTest, Eval2) {
 }
 
 TEST_F(PolicyTest, Parse3) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example3)));
