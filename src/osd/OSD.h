@@ -1143,7 +1143,6 @@ protected:
   void tick();
   void tick_without_osd_lock();
   void _dispatch(Message *m);
-  void dispatch_op(OpRequestRef op);
 
   void check_osdmap_features();
 
@@ -1495,7 +1494,6 @@ private:
     assert(osd_lock.is_locked());
     finished.splice(finished.end(), ls);
   }
-  void do_waiters();
   
   // -- op tracking --
   OpTracker op_tracker;
