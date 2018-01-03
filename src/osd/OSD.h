@@ -254,6 +254,7 @@ class MOSDPGQuery;
 class MOSDPGNotify;
 class MOSDPGInfo;
 class MOSDPGRemove;
+class MOSDForceRecovery;
 
 class OSD;
 
@@ -862,8 +863,6 @@ public:
     Mutex::Locker l(recovery_lock);
     _queue_for_recovery(make_pair(queued, pg), reserved_pushes);
   }
-
-  void adjust_pg_priorities(const vector<PGRef>& pgs, int newflags);
 
   // osd map cache (past osd maps)
   Mutex map_cache_lock;
@@ -2021,7 +2020,7 @@ protected:
 
   PGRef handle_pg_create_info(OSDMapRef osdmap, const PGCreateInfo *info);
 
-  void handle_force_recovery(Message *m);
+  void handle_fast_force_recovery(MOSDForceRecovery *m);
 
   // -- commands --
   struct Command {
@@ -2102,6 +2101,7 @@ private:
     case CEPH_MSG_PING:
     case CEPH_MSG_OSD_OP:
     case CEPH_MSG_OSD_BACKOFF:
+    case MSG_OSD_FORCE_RECOVERY:
     case MSG_MON_COMMAND:
     case MSG_COMMAND:
     case MSG_OSD_PG_CREATE2:
