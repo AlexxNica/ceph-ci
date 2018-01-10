@@ -1,10 +1,6 @@
 13.0.0
 ------
 
-* The RBD C API's rbd_discard method now enforces a maximum length of
-  2GB to match the C++ API's Image::discard method. This restriction
-  prevents overflow of the result code.
-
 * *CephFS*:
 
   * Several "ceph mds" commands have been obsoleted and replaced
@@ -25,6 +21,13 @@
     mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now
     obsolete.
 
+* *RBD*
+
+  * The RBD C API's rbd_discard method now enforces a maximum length of
+    2GB to match the C++ API's Image::discard method. This restriction
+    prevents overflow of the result code.
+
+  * The rbd CLI's "lock list" JSON and XML output has changed.
 
 
 >= 12.2.2
