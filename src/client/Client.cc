@@ -909,6 +909,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
   // setting I_COMPLETE needs to happen after adding the cap
   if (updating_inode &&
+      in->snapid == CEPH_NOSNAP &&
       in->is_dir() &&
       (st->cap.caps & CEPH_CAP_FILE_SHARED) &&
       (issued & CEPH_CAP_FILE_EXCL) == 0 &&
@@ -3830,6 +3831,16 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     in->snaprealm = get_snap_realm(realm);
     in->snaprealm->inodes_with_caps.push_back(&in->snaprealm_item);
     ldout(cct, 15) << "add_update_cap first one, opened snaprealm " << in->snaprealm << dendl;
+  } else {
+    assert(in->snaprealm);
+    if ((flags & CEPH_CAP_FLAG_AUTH) &&
+	realm != inodeno_t(-1) && in->snaprealm->ino != realm) {
+      in->snaprealm_item.remove_myself();
+      auto oldrealm = in->snaprealm;
+      in->snaprealm = get_snap_realm(realm);
+      in->snaprealm->inodes_with_caps.push_back(&in->snaprealm_item);
+      put_snap_realm(oldrealm);
+    }
   }
 
   mds_rank_t mds = mds_session->mds_num;

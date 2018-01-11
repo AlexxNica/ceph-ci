@@ -401,15 +401,18 @@ public:
    */
 
   struct projected_inode_t {
+    static sr_t* const UNDEF_SRNODE;
+
     inode_t *inode;
     std::map<std::string,bufferptr> *xattrs;
     sr_t *snapnode;
 
     projected_inode_t()
-      : inode(NULL), xattrs(NULL), snapnode(NULL) {}
+      : inode(NULL), xattrs(NULL), snapnode(UNDEF_SRNODE) {}
     projected_inode_t(inode_t *in, sr_t *sn)
       : inode(in), xattrs(NULL), snapnode(sn) {}
-    projected_inode_t(inode_t *in, std::map<std::string, bufferptr> *xp = NULL, sr_t *sn = NULL)
+    projected_inode_t(inode_t *in, std::map<std::string, bufferptr> *xp=NULL,
+		      sr_t *sn=UNDEF_SRNODE)
       : inode(in), xattrs(xp), snapnode(sn) {}
   };
   std::list<projected_inode_t*> projected_nodes;   // projected values (only defined while dirty)
@@ -478,13 +481,19 @@ public:
     return &xattrs;
   }
 
-  sr_t *project_snaprealm(snapid_t snapid=0);
+  sr_t *prepare_new_srnode(snapid_t snapid);
+  void project_snaprealm(sr_t *new_srnode);
+  sr_t *project_snaprealm(snapid_t snapid=0) {
+    sr_t* new_srnode = prepare_new_srnode(snapid);
+    project_snaprealm(new_srnode);
+    return new_srnode;
+  }
   const sr_t *get_projected_srnode() const {
     if (num_projected_srnodes > 0) {
       for (std::list<projected_inode_t*>::const_reverse_iterator p = projected_nodes.rbegin();
 	  p != projected_nodes.rend();
 	  ++p)
-	if ((*p)->snapnode)
+	if ((*p)->snapnode != projected_inode_t::UNDEF_SRNODE)
 	  return (*p)->snapnode;
     }
     if (snaprealm)
@@ -492,10 +501,32 @@ public:
     else
       return NULL;
   }
-  void project_past_snaprealm_parent(SnapRealm *newparent);
+  sr_t *get_projected_srnode() {
+    if (num_projected_srnodes > 0) {
+      for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+	   p != projected_nodes.rend();
+	   ++p)
+	if ((*p)->snapnode != projected_inode_t::UNDEF_SRNODE)
+	  return (*p)->snapnode;
+    }
+    if (snaprealm)
+      return &snaprealm->srnode;
+    else
+      return NULL;
+  }
+
+  void mark_snaprealm_global(sr_t *new_srnode);
+  void clear_snaprealm_global(sr_t *new_srnode);
+  bool is_projected_snaprealm_global() const;
+
+  void record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent);
+  void record_snaprealm_parent_dentry(sr_t *new_snap, SnapRealm *newparent,
+				      CDentry *dn, bool primary_dn);
+  void project_snaprealm_past_parent(SnapRealm *newparent);
+  void early_pop_projected_snaprealm();
 
 private:
-  void pop_projected_snaprealm(sr_t *next_snaprealm);
+  void pop_projected_snaprealm(sr_t *next_snaprealm, bool early);
 
 public:
   old_inode_t& cow_old_inode(snapid_t follows, bool cow_head);
@@ -696,7 +727,7 @@ public:
     return (mds_rank_t)MDS_INO_STRAY_OWNER(inode.ino);
   }
   bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(inode.ino); }
-  bool is_base() const { return is_root() || is_mdsdir(); }
+  bool is_base() const { return MDS_INO_IS_BASE(inode.ino); }
   bool is_system() const { return inode.ino < MDS_INO_SYSTEM_BASE; }
   bool is_normal() const { return !(is_base() || is_system() || is_stray()); }
 
