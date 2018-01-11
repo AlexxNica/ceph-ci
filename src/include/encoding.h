@@ -18,6 +18,8 @@
 
 #include "include/memory.h"
 
+#include "common/convenience.h"
+
 #include "byteorder.h"
 #include "buffer.h"
 
@@ -274,8 +276,10 @@ inline void decode(T &o, bufferlist& bl)
 #include <deque>
 #include <vector>
 #include <string>
-#include <boost/optional/optional_io.hpp>
+#include <tuple>
+
 #include <boost/tuple/tuple.hpp>
+#include <boost/optional/optional_io.hpp>
 
 #ifndef _BACKWARD_BACKWARD_WARNING_H
 #define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
@@ -312,7 +316,23 @@ inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
 
-//triple tuple
+// std::tuple
+template<typename... Ts>
+inline void encode(const std::tuple<Ts...> &t, bufferlist& bl)
+{
+  ceph::for_each(t, [&bl](const auto& e) {
+      encode(e, bl);
+    });
+}
+template<typename... Ts>
+inline void decode(std::tuple<Ts...> &t, bufferlist::iterator &bp)
+{
+  ceph::for_each(t, [&bp](auto& e) {
+      decode(e, bp);
+    });
+}
+
+//triple boost::tuple
 template<class A, class B, class C>
 inline void encode(const boost::tuple<A, B, C> &t, bufferlist& bl)
 {
