@@ -3534,6 +3534,10 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
       pools[pool].last_change = epoch;
       pools[pool].application_metadata.insert(
         {pg_pool_t::APPLICATION_NAME_RBD, {}});
+      pools[pool].dmc_cli_info =
+	crimson::dmclock::ClientInfo(cct->_conf->get_val<double>("osd_pool_default_mclock_res"),
+				     cct->_conf->get_val<double>("osd_pool_default_mclock_wgt"),
+				     cct->_conf->get_val<double>("osd_pool_default_mclock_lim"));
       pool_name[pool] = plname;
       name_pool[plname] = pool;
     }
