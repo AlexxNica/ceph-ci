@@ -32,7 +32,7 @@
     prevents overflow of the result code.
 
   * The rbd CLI's "lock list" JSON and XML output has changed.
-
+  * The rbd CLI's "showmapped" JSON and XML output has changed.
 
 >= 12.2.2
 ---------
