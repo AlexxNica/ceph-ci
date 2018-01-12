@@ -167,7 +167,7 @@ public:
       decode(services, p);
     }
     if (header.version >= 7) {
-      ::decode(modules, p);
+      decode(modules, p);
     }
   }
 };
