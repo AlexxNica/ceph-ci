@@ -73,7 +73,7 @@ void lockdep_register_ceph_context(CephContext *cct)
                                "lockdep enabled");
     g_lockdep = true;
     g_lockdep_ceph_ctx = cct;
-    lockdep_dout(1) << "lockdep start" << dendl;
+    lockdep_dout(0) << "lockdep start (lockdep_mutex=" << &lockdep_mutex << ")" << dendl;
     if (!free_ids_inited) {
       free_ids_inited = true;
       memset((void*) &free_ids[0], 255, sizeof(free_ids));
@@ -198,6 +198,9 @@ static int _lockdep_register(const char *name)
 int lockdep_register(const char *name)
 {
   int id;
+
+  lockdep_dout(0) << "lockdep_register registering " << name << " lockdep_mutex="
+                   << &lockdep_mutex << dendl;
 
   pthread_mutex_lock(&lockdep_mutex);
   id = _lockdep_register(name);
