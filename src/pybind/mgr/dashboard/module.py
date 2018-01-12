@@ -32,9 +32,6 @@ from mgr_module import MgrModule, MgrStandbyModule, CommandResult
 from types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
-import rados
-import rbd_iscsi
-import rbd_mirroring
 from rbd_ls import RbdLs, RbdPoolLs
 from cephfs_clients import CephFSClients
 from rgw import RGWDaemons
@@ -124,6 +121,13 @@ class Module(MgrModule):
         self.log_primed = False
         self.log_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
         self.audit_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
+
+        # Import Ceph bindings at construction time rather than import time,
+        # for debugging weird lockdep crashes during import
+        # (https://github.com/ceph/ceph/pull/19235/files)
+        import rados
+        import rbd_iscsi
+        import rbd_mirroring
 
         # Keep a librados instance for those that need it.
         self._rados = None

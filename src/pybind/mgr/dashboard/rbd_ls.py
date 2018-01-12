@@ -1,6 +1,4 @@
 
-import rbd
-import rados
 from types import OsdMap
 from remote_view_cache import RemoteViewCache
 
@@ -27,10 +25,14 @@ class RbdLs(RemoteViewCache):
         self.log.debug("Constructing IOCtx")
         self.ioctx = self._module.rados.open_ioctx(self.pool)
 
+        import rbd
+
         self.log.debug("Constructing RBD")
         self.rbd = rbd.RBD()
 
     def _get(self):
+        import rbd
+
         self.log.debug("rbd.list")
         names = self.rbd.list(self.ioctx)
         result = []
@@ -54,6 +56,8 @@ class RbdLs(RemoteViewCache):
         return result
 
     def _format_bitmask(self, features):
+        import rbd
+
         names = ""
         RBD_FEATURES_NAME_MAPPING = {
             rbd.RBD_FEATURE_LAYERING: "layering",
